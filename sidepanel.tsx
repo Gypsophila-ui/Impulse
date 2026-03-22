@@ -57,6 +57,30 @@ export default function Sidepanel() {
         throw new Error("未找到当前活动标签页")
       }
 
+      // #region agent log: tab context for sidepanel selection (H10)
+      fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "90a69d"
+        },
+        body: JSON.stringify({
+          sessionId: "90a69d",
+          runId: "debug_sidepanel_sel",
+          hypothesisId: "H10",
+          location: "sidepanel.tsx:fetchSelection:tabContext",
+          message: "tabs.query active tab before getSelectionInTab",
+          data: {
+            tabId: tab.id,
+            url: tab.url?.slice(0, 120),
+            windowId: tab.windowId,
+            active: tab.active
+          },
+          timestamp: Date.now()
+        })
+      }).catch(() => {})
+      // #endregion
+
       const text = await getSelectionInTab(tab.id)
       // #region debug log: sidepanel got selection via executeScript
       fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {

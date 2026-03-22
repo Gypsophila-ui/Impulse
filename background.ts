@@ -10,7 +10,7 @@ const isProbablyPdfUrl = (url?: string) => {
 /**
  * Chrome 限制：`sidePanel.open()` 只能在用户手势上下文中调用。
  * 后台事件（tabs.onUpdated 等）里调用会抛错（日志已证实）。
- * 这里仅注册当前标签页的侧边栏页面，实际打开由 popup 按钮等用户手势触发。
+ * 这里仅注册当前标签页的侧边栏页面；用户点击工具栏图标打开侧栏（见下方 setPanelBehavior）。
  */
 const configureSidePanelForTab = async (tabId: number) => {
   try {
@@ -107,11 +107,21 @@ const handleTab = (tabId: number, url?: string) => {
   void configureSidePanelForTab(tabId)
 }
 
+const ensureOpenSidePanelOnActionClick = () => {
+  if (!("sidePanel" in chrome)) return
+  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
+  ensureOpenSidePanelOnActionClick()
   const tabs = await chrome.tabs.query({})
   for (const tab of tabs) {
     if (tab.id) handleTab(tab.id, tab.url)
   }
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureOpenSidePanelOnActionClick()
 })
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {

@@ -24,6 +24,9 @@
     "typescript": "5.3.3"
   },
   "manifest": {
+    "action": {
+      "default_title": "打开 Impulse 侧栏"
+    },
     "host_permissions": [
       "https://*/*"
     ],
