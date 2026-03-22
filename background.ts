@@ -7,12 +7,16 @@ const isProbablyPdfUrl = (url?: string) => {
   return u.includes("/pdf/")
 }
 
-const openSidePanelForTab = async (tabId: number) => {
+/**
+ * Chrome 限制：`sidePanel.open()` 只能在用户手势上下文中调用。
+ * 后台事件（tabs.onUpdated 等）里调用会抛错（日志已证实）。
+ * 这里仅注册当前标签页的侧边栏页面，实际打开由 popup 按钮等用户手势触发。
+ */
+const configureSidePanelForTab = async (tabId: number) => {
   try {
     if (!("sidePanel" in chrome)) return
 
-    // 启用并切到指定页面
-    // #region debug log: background opening side panel
+    // #region debug log: background configuring side panel
     fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
       method: "POST",
       headers: {
@@ -21,10 +25,10 @@ const openSidePanelForTab = async (tabId: number) => {
       },
       body: JSON.stringify({
         sessionId: "90a69d",
-        runId: "debug_001",
+        runId: "post-fix",
         hypothesisId: "H1",
-        location: "background.ts:openSidePanelForTab:start",
-        message: "try open sidepanel",
+        location: "background.ts:configureSidePanelForTab:start",
+        message: "setOptions sidepanel for tab",
         data: { tabId },
         timestamp: Date.now()
       })
@@ -37,10 +41,7 @@ const openSidePanelForTab = async (tabId: number) => {
       enabled: true
     })
 
-    // 可能需要用户交互权限；失败的话也不影响 UI 可手动打开。
-    await chrome.sidePanel.open({ tabId })
-
-    // #region debug log: background opened side panel ok
+    // #region debug log: background side panel configured
     fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
       method: "POST",
       headers: {
@@ -49,17 +50,17 @@ const openSidePanelForTab = async (tabId: number) => {
       },
       body: JSON.stringify({
         sessionId: "90a69d",
-        runId: "debug_001",
+        runId: "post-fix",
         hypothesisId: "H1",
-        location: "background.ts:openSidePanelForTab:success",
-        message: "sidepanel opened",
+        location: "background.ts:configureSidePanelForTab:success",
+        message: "setOptions ok (no auto open)",
         data: { tabId },
         timestamp: Date.now()
       })
     }).catch(() => {})
     // #endregion
   } catch (e: any) {
-    // #region debug log: background open side panel failed
+    // #region debug log: background setOptions failed
     fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
       method: "POST",
       headers: {
@@ -68,10 +69,10 @@ const openSidePanelForTab = async (tabId: number) => {
       },
       body: JSON.stringify({
         sessionId: "90a69d",
-        runId: "debug_001",
+        runId: "post-fix",
         hypothesisId: "H1",
-        location: "background.ts:openSidePanelForTab:error",
-        message: "sidepanel open failed",
+        location: "background.ts:configureSidePanelForTab:error",
+        message: "setOptions failed",
         data: {
           error: e?.message ?? String(e),
           name: e?.name
@@ -80,7 +81,6 @@ const openSidePanelForTab = async (tabId: number) => {
       })
     }).catch(() => {})
     // #endregion
-    // ignore
   }
 }
 
@@ -104,7 +104,7 @@ const handleTab = (tabId: number, url?: string) => {
     })
   }).catch(() => {})
   // #endregion
-  void openSidePanelForTab(tabId)
+  void configureSidePanelForTab(tabId)
 }
 
 chrome.runtime.onInstalled.addListener(async () => {

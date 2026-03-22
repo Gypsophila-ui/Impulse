@@ -1,9 +1,65 @@
 import { useState } from "react"
 
+import { getSelectionInTab } from "~utils/get-selection"
+
 function IndexPopup() {
   const [selectedText, setSelectedText] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const handleOpenSidePanel = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (!tab?.id) throw new Error("未找到当前活动标签页")
+
+      await chrome.sidePanel.setOptions({
+        tabId: tab.id,
+        path: "sidepanel.html",
+        enabled: true
+      })
+      await chrome.sidePanel.open({ tabId: tab.id })
+
+      // #region debug log: popup opened sidepanel via user gesture
+      fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "90a69d"
+        },
+        body: JSON.stringify({
+          sessionId: "90a69d",
+          runId: "post-fix",
+          hypothesisId: "H1",
+          location: "popup.tsx:handleOpenSidePanel",
+          message: "sidepanel.open from popup ok",
+          data: { tabId: tab.id },
+          timestamp: Date.now()
+        })
+      }).catch(() => {})
+      // #endregion
+    } catch (e: any) {
+      // #region debug log: popup open sidepanel failed
+      fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "90a69d"
+        },
+        body: JSON.stringify({
+          sessionId: "90a69d",
+          runId: "post-fix",
+          hypothesisId: "H1",
+          location: "popup.tsx:handleOpenSidePanel:error",
+          message: "sidepanel.open from popup failed",
+          data: { error: e?.message ?? String(e) },
+          timestamp: Date.now()
+        })
+      }).catch(() => {})
+      // #endregion
+
+      setError(e?.message ?? "打开侧边栏失败")
+    }
+  }
 
   const handleReadSelection = async () => {
     setLoading(true)
@@ -35,12 +91,8 @@ function IndexPopup() {
         throw new Error("未找到当前活动标签页")
       }
 
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        type: "GET_SELECTION"
-      })
-
-      const text = response?.text ?? ""
-      // #region debug log: popup received selection response
+      const text = await getSelectionInTab(tab.id)
+      // #region debug log: popup received selection via executeScript
       fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
         method: "POST",
         headers: {
@@ -49,10 +101,10 @@ function IndexPopup() {
         },
         body: JSON.stringify({
           sessionId: "90a69d",
-          runId: "debug_001",
-          hypothesisId: "H4",
+          runId: "post-fix",
+          hypothesisId: "H9",
           location: "popup.tsx:handleReadSelection:response",
-          message: "popup received selection",
+          message: "popup received selection (executeScript allFrames)",
           data: { tabId: tab.id, length: text.length, nonEmpty: text.trim().length > 0 },
           timestamp: Date.now()
         })
@@ -93,6 +145,18 @@ function IndexPopup() {
         width: 320
       }}>
       <h2>Impulse 论文助手</h2>
+
+      <button
+        type="button"
+        onClick={() => void handleOpenSidePanel()}
+        style={{
+          padding: "6px 12px",
+          marginBottom: 8,
+          cursor: "pointer",
+          width: "100%"
+        }}>
+        打开右侧侧边栏（需用户手势）
+      </button>
 
       <button
         onClick={handleReadSelection}

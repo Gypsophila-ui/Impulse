@@ -31,7 +31,8 @@
       "default_path": "sidepanel.html"
     },
     "permissions": [
-      "sidePanel"
+      "sidePanel",
+      "scripting"
     ]
   }
 }

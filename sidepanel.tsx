@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 
+import { getSelectionInTab } from "~utils/get-selection"
+
 type TabKey = "summary" | "translation" | "highlight" | "comment"
 
 const tabList: Array<{ key: TabKey; label: string }> = [
@@ -55,12 +57,8 @@ export default function Sidepanel() {
         throw new Error("未找到当前活动标签页")
       }
 
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        type: "GET_SELECTION"
-      })
-
-      const text = response?.text ?? ""
-      // #region debug log: sidepanel got selection response
+      const text = await getSelectionInTab(tab.id)
+      // #region debug log: sidepanel got selection via executeScript
       fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
         method: "POST",
         headers: {
@@ -69,10 +67,10 @@ export default function Sidepanel() {
         },
         body: JSON.stringify({
           sessionId: "90a69d",
-          runId: "debug_001",
-          hypothesisId: "H4",
+          runId: "post-fix",
+          hypothesisId: "H9",
           location: "sidepanel.tsx:fetchSelection:response",
-          message: "sidepanel received selection",
+          message: "sidepanel received selection (executeScript allFrames)",
           data: {
             tabId: tab.id,
             length: text.length,

@@ -20,8 +20,24 @@ const safeIsInIframe = (): boolean => {
   }
 }
 
+/**
+ * 扩展热重载/更新后，旧页面里的 content script 仍会执行，但 `chrome.runtime` 已失效，
+ * 此时访问会抛出 `Extension context invalidated`。
+ */
+const isExtensionContextValid = (): boolean => {
+  try {
+    return Boolean(chrome.runtime?.id)
+  } catch {
+    return false
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_SELECTION") {
+    if (!isExtensionContextValid()) {
+      return
+    }
+
     // #region debug log: selection message received
     fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
       method: "POST",
@@ -70,7 +86,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     // 始终响应，避免当 selection 在顶层 frame 读取为空时，
     // 请求端出现“Receiving end does not exist / 无反应”。
-    sendResponse({ text })
+    try {
+      sendResponse({ text })
+    } catch {
+      // 上下文可能在 sendResponse 瞬间已失效
+    }
   }
 })
 
