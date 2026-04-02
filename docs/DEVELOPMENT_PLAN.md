@@ -10,21 +10,64 @@
 ## 2. 当前状态
 
 ### 已完成功能
-- [x] 基础项目结构搭建（Plasmo + React）
+- [x] 基础项目结构搭建（Plasmo 0.90.5 + React 18.2.0 + TypeScript 5.3.3）
 - [x] 右侧边栏 UI（四个 Tab：summary / translation / highlight / comment）
-- [x] PDF 页面选中文本获取（包含 arXiv PDF 兼容性修复）
-- [x] 侧边栏自动打开配置
+  - 文件：`sidepanel.tsx` (430 行)
+  - 包含状态管理、Tab 切换、选中文本展示
+- [x] PDF 页面选中文本获取（包含 arXiv iframed PDF 兼容性）
+  - 文件：`utils/get-selection.ts` (150 行)
+  - 跨 frame 选中文本提取，使用 `allFrames: true`
+  - 支持 ISOLATED 和 MAIN world 双模式回退
+- [x] PDF URL 自动检测
+  - 文件：`background.ts` (136 行)
+  - `isProbablyPdfUrl()` 启发式检测
+- [x] 侧边栏生命周期管理
+  - 文件：`background.ts`
+  - Tab 更新监听、用户手势触发
 
-### 待实现功能（占位状态）
-- [ ] Summary：调用 LLM 生成选中文本摘要
-- [ ] Translation：调用 LLM 翻译选中文本
+### 已完成功能（Phase 1）✅
+- [x] Summary：调用 LLM 生成选中文本摘要
+  - 文件：`sidepanel.tsx` - 已集成 OpenAI API
+- [x] Translation：调用 LLM 翻译选中文本
+  - 文件：`sidepanel.tsx` - 已集成 OpenAI API
+- [x] LLM API 客户端封装（`utils/llm-client.ts`）
+  - 功能：`summarize()`, `translate()` 方法
+  - 使用 OpenAI GPT-4o-mini（默认）
+- [x] chrome.storage 封装（`utils/storage.ts`）
+  - 功能：`saveLLMConfig()`, `getLLMConfig()`, `hasApiKey()`, `clearConfig()`
+- [x] API Key 配置页面（`options.tsx`）
+  - 界面：API Key 输入、模型选择
+  - 模型选项：GPT-4o-mini / GPT-4o / GPT-3.5-turbo
+- [x] 权限修复
+  - 添加 `activeTab` 权限（关键）
+  - 添加 `file://*/*` 支持本地 PDF
+  - 添加 `storage` 权限
+- [x] **UI/UX 优化升级** (2026-04-02)
+  - 现代化渐变色设计（紫色主题）
+  - 精美的 Tab 切换动画
+  - 加载状态 Spinner 组件
+  - Hover 交互效果
+  - 友好的错误提示
+  - 图标和 Emoji 增强视觉体验
+  - Options 页面全新设计（卡片式布局、show/hide API key）
+  - 响应式布局优化
+
+### 待实现功能（Phase 2）
 - [ ] Highlight：生成高亮建议并映射回页面
+  - 位置：`sidepanel.tsx` - 需要 DOM 定位和注入
 - [ ] Comment：保存笔记并关联选中文本
+  - 位置：`sidepanel.tsx` - 需要持久化存储方案
 
 ### 技术债务
-- 大量调试日志代码（`fetch("http://127.0.0.1:7737/...")`）需要清理
-- 缺少单元测试和 E2E 测试
-- 缺少 TypeScript 严格检查配置
+- **依赖管理**
+  - ✅ 已安装 OpenAI SDK (v6.33.0)
+  - 无 ESLint 配置
+  - 无测试框架（Jest/Playwright）
+- **TypeScript 配置**
+  - 未启用 strict mode
+  - 大量 `any` 类型在错误处理中
+- **文档缺失**
+  - `docs/testing-checklist.md` 被引用但不存在
 
 ---
 
@@ -34,16 +77,75 @@
 
 **目标**：完成基础功能可用版本
 
-| 序号 | 任务 | 依赖 | 预估工作量 |
-|------|------|------|------------|
-| 1.1 | 接入 LLM API（OpenAI / Anthropic / 本地模型） | - | 2-3 天 |
-| 1.2 | 实现 Summary 功能：调用 LLM 生成摘要 | 1.1 | 1 天 |
-| 1.3 | 实现 Translation 功能：调用 LLM 翻译 | 1.1 | 1 天 |
-| 1.4 | 添加 API Key 配置界面 | - | 0.5 天 |
-| 1.5 | 清理调试日志代码 | - | 0.5 天 |
-| 1.6 | 本地测试与 bug 修复 | 1.2-1.5 | 1-2 天 |
+#### 任务优先级排序
 
-**交付物**：可用的论文摘要和翻译功能
+**P0（阻塞性）- 已完成 ✅**
+- [x] Task 1.0: 清理调试日志代码（16 处）
+  - 状态：✅ 已完成 (2026-04-02)
+  - 影响：生产环境不能有这些日志
+  - 文件：`background.ts`, `sidepanel.tsx`, `utils/get-selection.ts`, `contents/selection.ts`
+  - 操作：删除所有 `#region` ... `#endregion` 包裹的 fetch 调用
+
+**P1（核心功能）- 已完成 ✅**
+- [x] Task 1.1: 安装 LLM SDK 依赖
+  - 状态：✅ 已完成 (2026-04-02)
+  - 安装：`npm install openai` (v6.33.0)
+
+- [x] Task 1.2: 创建存储工具 (`utils/storage.ts`)
+  - 状态：✅ 已完成 (2026-04-02)
+  - 功能：封装 `chrome.storage.local` API
+  - 方法：`saveLLMConfig()`, `getLLMConfig()`, `hasApiKey()`, `clearConfig()`
+
+- [x] Task 1.3: 创建 LLM 客户端 (`utils/llm-client.ts`)
+  - 状态：✅ 已完成 (2026-04-02)
+  - 功能：封装 OpenAI API 调用
+  - 方法：`summarize(text)`, `translate(text, targetLang)`, `resetClient()`
+  - 错误处理：配置缺失、API 失败
+
+- [x] Task 1.4: 创建配置页面 (`options.tsx`)
+  - 状态：✅ 已完成 (2026-04-02)
+  - 功能：API Key 输入和保存、模型选择
+  - UI：表单（API Key 输入框 + 模型下拉 + 保存按钮）
+
+- [x] Task 1.5: 实现 Summary 功能
+  - 状态：✅ 已完成 (2026-04-02)
+  - 文件：`sidepanel.tsx`
+  - 替换 TODO 为实际 LLM 调用
+  - 添加加载状态、错误处理
+  - 依赖：Task 1.3
+
+- [x] Task 1.6: 实现 Translation 功能
+  - 状态：✅ 已完成 (2026-04-02)
+  - 文件：`sidepanel.tsx`
+  - 替换 TODO 为实际 LLM 调用
+  - 目标语言默认为中文
+
+- [x] Task 1.7: 修复文本选择 Bug
+  - 状态：✅ 已完成 (2026-04-02)
+  - 问题：在 PDF 页面选中文字无法在侧边栏显示
+  - 修复：添加 `activeTab`, `file://*/*`, `http://*/*` 权限
+  - 改进：更清晰的错误提示信息
+
+**P2（优化）- 可选**
+- [ ] Task 1.8: 添加 TypeScript 类型定义 (`types/index.ts`)
+  - 接口：`LLMConfig`, `ApiResponse`, `StorageData`
+
+- [ ] Task 1.9: 本地测试与 bug 修复
+  - 测试场景：arXiv PDF、本地 PDF、Google Drive PDF
+  - 检查：选中文本、摘要生成、翻译功能
+
+- [ ] Task 1.10: 优化用户体验
+  - 添加加载动画
+  - 改进错误提示
+  - 添加重试机制
+
+**交付物**：
+- ✅ 无调试日志的干净代码
+- ✅ 可配置 API Key 的设置页面
+- ✅ 可用的论文摘要功能
+- ✅ 可用的论文翻译功能
+
+**预估总工时**：2-3 天（假设每天 6-8 小时有效开发时间）
 
 ---
 

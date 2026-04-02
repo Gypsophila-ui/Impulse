@@ -1,15 +1,32 @@
 import React, { useEffect, useMemo, useState } from "react"
 
 import { getSelectionInTab } from "~utils/get-selection"
+import { summarize, translate } from "~utils/llm-client"
+import { hasApiKey } from "~utils/storage"
 
 type TabKey = "summary" | "translation" | "highlight" | "comment"
 
-const tabList: Array<{ key: TabKey; label: string }> = [
-  { key: "summary", label: "summary" },
-  { key: "translation", label: "translation" },
-  { key: "highlight", label: "highlight" },
-  { key: "comment", label: "comment" }
+const tabList: Array<{ key: TabKey; label: string; icon: string }> = [
+  { key: "summary", label: "Summary", icon: "📝" },
+  { key: "translation", label: "Translate", icon: "🌐" },
+  { key: "highlight", label: "Highlight", icon: "✨" },
+  { key: "comment", label: "Comment", icon: "💬" }
 ]
+
+// 加载动画组件
+const Spinner = () => (
+  <div
+    style={{
+      display: "inline-block",
+      width: 16,
+      height: 16,
+      border: "2px solid rgba(255, 255, 255, 0.3)",
+      borderTop: "2px solid #fff",
+      borderRadius: "50%",
+      animation: "spin 0.8s linear infinite"
+    }}
+  />
+)
 
 const isSameText = (a: string, b: string) => a === b
 
@@ -25,138 +42,39 @@ export default function Sidepanel() {
 
   const [commentDraft, setCommentDraft] = useState("")
 
+  const [loading, setLoading] = useState(false)
+  const [hasKey, setHasKey] = useState(false)
+
   const fetchSelection = async () => {
     setLoadingSelection(true)
     setError(null)
 
     try {
-      // #region debug log: sidepanel requesting selection
-      fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "90a69d"
-        },
-        body: JSON.stringify({
-          sessionId: "90a69d",
-          runId: "debug_001",
-          hypothesisId: "H4",
-          location: "sidepanel.tsx:fetchSelection:start",
-          message: "sidepanel fetchSelection started",
-          data: {
-            activeTab,
-            prevSelectedLen: selectedText.length
-          },
-          timestamp: Date.now()
-        })
-      }).catch(() => {})
-      // #endregion
-
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
-        throw new Error("未找到当前活动标签页")
+        throw new Error(“未找到当前活动标签页”)
       }
 
-      // #region agent log: tab context for sidepanel selection (H10)
-      fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "90a69d"
-        },
-        body: JSON.stringify({
-          sessionId: "90a69d",
-          runId: "debug_sidepanel_sel",
-          hypothesisId: "H10",
-          location: "sidepanel.tsx:fetchSelection:tabContext",
-          message: "tabs.query active tab before getSelectionInTab",
-          data: {
-            tabId: tab.id,
-            url: tab.url?.slice(0, 120),
-            windowId: tab.windowId,
-            active: tab.active
-          },
-          timestamp: Date.now()
-        })
-      }).catch(() => {})
-      // #endregion
-
       const text = await getSelectionInTab(tab.id)
-      // #region debug log: sidepanel got selection via executeScript
-      fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "90a69d"
-        },
-        body: JSON.stringify({
-          sessionId: "90a69d",
-          runId: "post-fix",
-          hypothesisId: "H9",
-          location: "sidepanel.tsx:fetchSelection:response",
-          message: "sidepanel received selection (executeScript allFrames)",
-          data: {
-            tabId: tab.id,
-            length: text.length,
-            nonEmpty: text.trim().length > 0
-          },
-          timestamp: Date.now()
-        })
-      }).catch(() => {})
-      // #endregion
 
       setSelectedText((prev) => (isSameText(prev, text) ? prev : text))
 
-      // 切到不同栏目时，output 的语义会变化：这里简单清空，避免“上一个 tab 的输出污染当前 tab”。
-      setOutput("")
+      // 切到不同栏目时，output 的语义会变化：这里简单清空，避免”上一个 tab 的输出污染当前 tab”。
+      setOutput(“”)
     } catch (e: any) {
-      // #region debug log: sidepanel fetchSelection error
-      fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "90a69d"
-        },
-        body: JSON.stringify({
-          sessionId: "90a69d",
-          runId: "debug_001",
-          hypothesisId: "H4",
-          location: "sidepanel.tsx:fetchSelection:error",
-          message: "sidepanel fetchSelection failed",
-          data: { error: e?.message ?? String(e) },
-          timestamp: Date.now()
-        })
-      }).catch(() => {})
-      // #endregion
-
-      setError(e?.message ?? "读取选中文本失败")
+      setError(e?.message ?? “读取选中文本失败”)
     } finally {
       setLoadingSelection(false)
     }
   }
 
   useEffect(() => {
-    // #region debug log: sidepanel mounted
-    fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "90a69d"
-      },
-      body: JSON.stringify({
-        sessionId: "90a69d",
-        runId: "debug_001",
-        hypothesisId: "H8",
-        location: "sidepanel.tsx:mount",
-        message: "sidepanel mounted",
-        data: { activeTab },
-        timestamp: Date.now()
-      })
-    }).catch(() => {})
-    // #endregion
-
     void fetchSelection()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    hasApiKey().then(setHasKey)
   }, [])
 
   const canUseSelection = useMemo(() => selectedText.trim().length > 0, [selectedText])
@@ -169,256 +87,609 @@ export default function Sidepanel() {
         display: "flex",
         flexDirection: "column",
         fontFamily:
-          'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial'
+          'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial',
+        background: "#f9fafb"
       }}>
+      {/* CSS 动画定义 */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .btn-hover {
+          transition: all 0.2s ease;
+        }
+        .btn-hover:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        .btn-hover:active:not(:disabled) {
+          transform: translateY(0);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .tab-btn {
+          transition: all 0.2s ease;
+        }
+        .tab-btn:hover {
+          transform: translateY(-2px);
+        }
+      `}</style>
+
+      {/* 头部区域 */}
       <div
         style={{
-          padding: 12,
+          padding: "16px",
           borderBottom: "1px solid #e5e7eb",
-          background: "#fff"
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          color: "#fff",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)"
         }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "18px" }}>Impulse</div>
-            <div style={{ color: "#6b7280", fontSize: 12 }}>PDF 右侧阅读助手</div>
+            <div style={{ fontWeight: 700, fontSize: 18, lineHeight: "24px", marginBottom: 4 }}>
+              ⚡ Impulse
+            </div>
+            <div style={{ color: "rgba(255, 255, 255, 0.9)", fontSize: 12 }}>
+              AI-Powered PDF Assistant
+            </div>
           </div>
           <button
             onClick={() => void fetchSelection()}
             disabled={loadingSelection}
+            className="btn-hover"
             style={{
-              padding: "6px 10px",
+              padding: "8px 14px",
               fontSize: 12,
-              cursor: loadingSelection ? "not-allowed" : "pointer"
+              fontWeight: 600,
+              background: loadingSelection ? "rgba(255, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.25)",
+              color: "#fff",
+              border: "1px solid rgba(255, 255, 255, 0.3)",
+              borderRadius: 8,
+              cursor: loadingSelection ? "not-allowed" : "pointer",
+              backdropFilter: "blur(10px)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6
             }}>
-            {loadingSelection ? "读取中..." : "刷新选中"}
+            {loadingSelection ? (
+              <>
+                <Spinner /> Loading...
+              </>
+            ) : (
+              "🔄 Refresh"
+            )}
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
           {tabList.map((t) => {
             const isActive = activeTab === t.key
             return (
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
+                className="tab-btn"
                 style={{
                   flex: 1,
-                  padding: "8px 6px",
-                  fontSize: 12,
+                  padding: "10px 8px",
+                  fontSize: 11,
+                  fontWeight: 600,
                   borderRadius: 8,
-                  border: isActive ? "1px solid #111827" : "1px solid #e5e7eb",
-                  background: isActive ? "#111827" : "#f9fafb",
-                  color: isActive ? "#fff" : "#111827",
-                  cursor: "pointer"
+                  border: "none",
+                  background: isActive ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.15)",
+                  color: isActive ? "#667eea" : "rgba(255, 255, 255, 0.9)",
+                  cursor: "pointer",
+                  backdropFilter: "blur(10px)",
+                  boxShadow: isActive ? "0 2px 8px rgba(0, 0, 0, 0.1)" : "none",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 4
                 }}>
-                {t.label}
+                <div style={{ fontSize: 16 }}>{t.icon}</div>
+                <div>{t.label}</div>
               </button>
             )
           })}
         </div>
+      </div>
 
-        {error && (
-          <div style={{ marginTop: 8, color: "#b91c1c", fontSize: 12 }}>{error}</div>
-        )}
+      {/* 错误提示 */}
+      {error && (
+        <div
+          style={{
+            margin: "12px 12px 0",
+            padding: "12px",
+            background: "#fee2e2",
+            border: "1px solid #fca5a5",
+            borderRadius: 8,
+            color: "#991b1b",
+            fontSize: 12,
+            lineHeight: "18px",
+            animation: "fadeIn 0.3s ease",
+            display: "flex",
+            alignItems: "start",
+            gap: 8
+          }}>
+          <div style={{ fontSize: 16 }}>⚠️</div>
+          <div style={{ flex: 1 }}>{error}</div>
+        </div>
+      )}
       </div>
 
       {/* 内容区 */}
-      <div style={{ padding: 12, overflow: "auto" }}>
-        <div style={{ color: "#111827", fontWeight: 700, marginBottom: 8, fontSize: 13 }}>
-          {activeTab === "summary" && "Summary（当前选中文本摘要）"}
-          {activeTab === "translation" && "Translation（当前选中文本翻译）"}
-          {activeTab === "highlight" && "Highlight（为选中文本生成高亮/标签，后续实现）"}
-          {activeTab === "comment" && "Comment（给选中文本做笔记，后续可保存）"}
+      <div style={{ padding: 16, overflow: “auto”, flex: 1 }}>
+        <div
+          style={{
+            color: “#111827”,
+            fontWeight: 700,
+            marginBottom: 12,
+            fontSize: 14,
+            display: “flex”,
+            alignItems: “center”,
+            gap: 8
+          }}>
+          <span style={{ fontSize: 20 }}>{tabList.find((t) => t.key === activeTab)?.icon}</span>
+          <span>
+            {activeTab === “summary” && “AI Summary”}
+            {activeTab === “translation” && “AI Translation”}
+            {activeTab === “highlight” && “Smart Highlight”}
+            {activeTab === “comment” && “Quick Notes”}
+          </span>
         </div>
 
         {/* 通用：展示选中文本 */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>当前选中</div>
+        <div style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              color: “#6b7280”,
+              fontSize: 11,
+              marginBottom: 8,
+              fontWeight: 600,
+              textTransform: “uppercase”,
+              letterSpacing: “0.5px”
+            }}>
+            📄 Selected Text
+          </div>
           <textarea
             readOnly
             value={selectedText}
-            placeholder="先在 PDF 页面选中一段文字，然后点击“刷新选中”或切换栏目。"
+            placeholder=”Select text from the PDF page, then click 'Refresh' button above.”
             style={{
-              width: "100%",
-              minHeight: 120,
+              width: “100%”,
+              minHeight: 100,
               fontSize: 12,
-              resize: "vertical",
-              boxSizing: "border-box",
-              padding: 10,
-              border: "1px solid #e5e7eb",
-              borderRadius: 10
+              lineHeight: “18px”,
+              resize: “vertical”,
+              boxSizing: “border-box”,
+              padding: 12,
+              border: “2px solid #e5e7eb”,
+              borderRadius: 10,
+              background: “#fff”,
+              color: “#374151”,
+              fontFamily: “inherit”,
+              transition: “border-color 0.2s ease”,
+              outline: “none”
             }}
+            onFocus={(e) => (e.target.style.borderColor = “#667eea”)}
+            onBlur={(e) => (e.target.style.borderColor = “#e5e7eb”)}
           />
+          {selectedText && (
+            <div style={{ marginTop: 6, fontSize: 11, color: “#6b7280” }}>
+              {selectedText.length} characters selected
+            </div>
+          )}
         </div>
 
-        {/* 各栏操作（先放占位逻辑） */}
+        {/* 各栏操作 */}
         {activeTab === "summary" && (
-          <div>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
             <button
-              disabled={!canUseSelection}
-              onClick={() => {
-                // TODO: 接 LLM，总结 selectedText。
-                setOutput(canUseSelection ? "（占位）后续将调用 LLM 生成摘要。" : "请先选择文本。")
+              disabled={!canUseSelection || loading}
+              onClick={async () => {
+                if (!hasKey) {
+                  setOutput(
+                    "⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first:\n1. Right-click extension icon\n2. Select 'Options'\n3. Enter your API Key"
+                  )
+                  return
+                }
+                setLoading(true)
+                setOutput("✨ Generating summary...")
+                try {
+                  const result = await summarize(selectedText)
+                  setOutput(result)
+                } catch (e: any) {
+                  setOutput(`❌ Failed to generate summary:\n\n${e?.message ?? String(e)}`)
+                } finally {
+                  setLoading(false)
+                }
               }}
+              className="btn-hover"
               style={{
-                padding: "8px 12px",
+                width: "100%",
+                padding: "12px 16px",
                 borderRadius: 10,
-                background: canUseSelection ? "#2563eb" : "#93c5fd",
+                background:
+                  canUseSelection && !loading
+                    ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                    : "#cbd5e1",
                 color: "#fff",
                 border: "none",
-                cursor: canUseSelection ? "pointer" : "not-allowed"
+                cursor: canUseSelection && !loading ? "pointer" : "not-allowed",
+                fontWeight: 600,
+                fontSize: 13,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                boxShadow:
+                  canUseSelection && !loading ? "0 4px 12px rgba(102, 126, 234, 0.4)" : "none"
               }}>
-              生成摘要
+              {loading ? (
+                <>
+                  <Spinner /> Generating...
+                </>
+              ) : (
+                <>📝 Generate Summary</>
+              )}
             </button>
-            <div style={{ marginTop: 10 }}>
-              <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>输出</div>
+            <div style={{ marginTop: 16 }}>
+              <div
+                style={{
+                  color: "#6b7280",
+                  fontSize: 11,
+                  marginBottom: 8,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }}>
+                💡 Output
+              </div>
               <div
                 style={{
                   whiteSpace: "pre-wrap",
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  padding: 10,
-                  border: "1px solid #e5e7eb",
+                  fontSize: 13,
+                  lineHeight: "22px",
+                  padding: 16,
+                  border: "2px solid #e5e7eb",
                   borderRadius: 10,
-                  minHeight: 80
+                  minHeight: 120,
+                  background: "#fff",
+                  color: "#374151",
+                  boxShadow: output ? "0 2px 8px rgba(0, 0, 0, 0.05)" : "none"
                 }}>
-                {output || "（尚无输出）"}
+                {output || (
+                  <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
+                    Summary will appear here...
+                  </span>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {activeTab === "translation" && (
-          <div>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
             <button
-              disabled={!canUseSelection}
-              onClick={() => {
-                // TODO: 接 LLM 翻译 selectedText。
-                setOutput(canUseSelection ? "（占位）后续将调用 LLM 生成翻译。" : "请先选择文本。")
+              disabled={!canUseSelection || loading}
+              onClick={async () => {
+                if (!hasKey) {
+                  setOutput(
+                    "⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first:\n1. Right-click extension icon\n2. Select 'Options'\n3. Enter your API Key"
+                  )
+                  return
+                }
+                setLoading(true)
+                setOutput("🌐 Translating to Chinese...")
+                try {
+                  const result = await translate(selectedText)
+                  setOutput(result)
+                } catch (e: any) {
+                  setOutput(`❌ Translation failed:\n\n${e?.message ?? String(e)}`)
+                } finally {
+                  setLoading(false)
+                }
               }}
+              className="btn-hover"
               style={{
-                padding: "8px 12px",
+                width: "100%",
+                padding: "12px 16px",
                 borderRadius: 10,
-                background: canUseSelection ? "#10b981" : "#6ee7b7",
+                background:
+                  canUseSelection && !loading
+                    ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
+                    : "#cbd5e1",
                 color: "#fff",
                 border: "none",
-                cursor: canUseSelection ? "pointer" : "not-allowed"
+                cursor: canUseSelection && !loading ? "pointer" : "not-allowed",
+                fontWeight: 600,
+                fontSize: 13,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                boxShadow: canUseSelection && !loading ? "0 4px 12px rgba(16, 185, 129, 0.4)" : "none"
               }}>
-              翻译
+              {loading ? (
+                <>
+                  <Spinner /> Translating...
+                </>
+              ) : (
+                <>🌐 Translate to Chinese</>
+              )}
             </button>
-            <div style={{ marginTop: 10 }}>
-              <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>输出</div>
+            <div style={{ marginTop: 16 }}>
+              <div
+                style={{
+                  color: "#6b7280",
+                  fontSize: 11,
+                  marginBottom: 8,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }}>
+                💡 Output
+              </div>
               <div
                 style={{
                   whiteSpace: "pre-wrap",
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  padding: 10,
-                  border: "1px solid #e5e7eb",
+                  fontSize: 13,
+                  lineHeight: "22px",
+                  padding: 16,
+                  border: "2px solid #e5e7eb",
                   borderRadius: 10,
-                  minHeight: 80
+                  minHeight: 120,
+                  background: "#fff",
+                  color: "#374151",
+                  boxShadow: output ? "0 2px 8px rgba(0, 0, 0, 0.05)" : "none"
                 }}>
-                {output || "（尚无输出）"}
+                {output || (
+                  <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
+                    Translation will appear here...
+                  </span>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {activeTab === "highlight" && (
-          <div>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
+            <div
+              style={{
+                padding: 12,
+                background: "#fef3c7",
+                border: "1px solid #fcd34d",
+                borderRadius: 8,
+                marginBottom: 16,
+                fontSize: 12,
+                color: "#92400e",
+                display: "flex",
+                alignItems: "start",
+                gap: 8
+              }}>
+              <div style={{ fontSize: 16 }}>🚧</div>
+              <div>
+                <strong>Coming Soon!</strong>
+                <br />
+                This feature will generate smart highlight suggestions based on your selected text.
+              </div>
+            </div>
             <button
               disabled={!canUseSelection}
+              className="btn-hover"
               onClick={() => {
-                // TODO: 接 LLM 生成标签/要点，然后再映射回页面高亮（需要 dom 定位）。
                 setOutput(
                   canUseSelection
-                    ? "（占位）后续将根据选中文本生成高亮建议。"
-                    : "请先选择文本。"
+                    ? "🚧 Feature in development\n\nThis will generate intelligent highlight suggestions and map them back to the PDF page."
+                    : "⚠️ Please select text first."
                 )
               }}
               style={{
-                padding: "8px 12px",
+                width: "100%",
+                padding: "12px 16px",
                 borderRadius: 10,
-                background: canUseSelection ? "#f59e0b" : "#fde68a",
-                color: "#111827",
+                background: canUseSelection
+                  ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
+                  : "#cbd5e1",
+                color: canUseSelection ? "#fff" : "#64748b",
                 border: "none",
-                cursor: canUseSelection ? "pointer" : "not-allowed"
+                cursor: canUseSelection ? "pointer" : "not-allowed",
+                fontWeight: 600,
+                fontSize: 13,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                boxShadow: canUseSelection ? "0 4px 12px rgba(245, 158, 11, 0.4)" : "none"
               }}>
-              生成高亮建议
+              ✨ Generate Highlights
             </button>
-            <div style={{ marginTop: 10 }}>
-              <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>输出</div>
+            <div style={{ marginTop: 16 }}>
+              <div
+                style={{
+                  color: "#6b7280",
+                  fontSize: 11,
+                  marginBottom: 8,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }}>
+                💡 Output
+              </div>
               <div
                 style={{
                   whiteSpace: "pre-wrap",
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  padding: 10,
-                  border: "1px solid #e5e7eb",
+                  fontSize: 13,
+                  lineHeight: "22px",
+                  padding: 16,
+                  border: "2px solid #e5e7eb",
                   borderRadius: 10,
-                  minHeight: 80
+                  minHeight: 120,
+                  background: "#fff",
+                  color: "#374151"
                 }}>
-                {output || "（尚无输出）"}
+                {output || (
+                  <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
+                    Highlight suggestions will appear here...
+                  </span>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {activeTab === "comment" && (
-          <div>
-            <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>
-              注释（后续可以绑定到选中文本并保存）
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
+            <div
+              style={{
+                padding: 12,
+                background: "#dbeafe",
+                border: "1px solid #93c5fd",
+                borderRadius: 8,
+                marginBottom: 16,
+                fontSize: 12,
+                color: "#1e40af",
+                display: "flex",
+                alignItems: "start",
+                gap: 8
+              }}>
+              <div style={{ fontSize: 16 }}>🚧</div>
+              <div>
+                <strong>Coming Soon!</strong>
+                <br />
+                Save notes linked to specific text selections. Notes will be persisted locally.
+              </div>
+            </div>
+            <div
+              style={{
+                color: "#6b7280",
+                fontSize: 11,
+                marginBottom: 8,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.5px"
+              }}>
+              ✏️ Your Note
             </div>
             <textarea
               value={commentDraft}
               onChange={(e) => setCommentDraft(e.target.value)}
-              placeholder="输入你的评论/疑问/复现要点..."
+              placeholder="Write your thoughts, questions, or key points here..."
               style={{
                 width: "100%",
                 minHeight: 120,
-                fontSize: 12,
+                fontSize: 13,
+                lineHeight: "20px",
                 resize: "vertical",
                 boxSizing: "border-box",
-                padding: 10,
-                border: "1px solid #e5e7eb",
-                borderRadius: 10
+                padding: 12,
+                border: "2px solid #e5e7eb",
+                borderRadius: 10,
+                background: "#fff",
+                color: "#374151",
+                fontFamily: "inherit",
+                transition: "border-color 0.2s ease",
+                outline: "none"
               }}
+              onFocus={(e) => (e.target.style.borderColor = "#667eea")}
+              onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
             />
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
-                disabled={!canUseSelection}
+                disabled={!canUseSelection || !commentDraft.trim()}
+                className="btn-hover"
                 onClick={() => {
-                  // TODO: 将 commentDraft + selectedText 保存为笔记。
                   setOutput(
-                    canUseSelection
-                      ? "（占位）后续将保存笔记，并关联到选中文本。"
-                      : "请先选择文本。"
+                    canUseSelection && commentDraft.trim()
+                      ? `🚧 Feature in development\n\nYour note will be saved and linked to:\n"${selectedText.slice(0, 100)}${selectedText.length > 100 ? "..." : ""}"\n\nNote content:\n${commentDraft}`
+                      : "⚠️ Please select text and write a note first."
                   )
                 }}
                 style={{
-                  padding: "8px 12px",
+                  flex: 1,
+                  padding: "12px 16px",
                   borderRadius: 10,
-                  background: canUseSelection ? "#111827" : "#9ca3af",
+                  background:
+                    canUseSelection && commentDraft.trim()
+                      ? "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)"
+                      : "#cbd5e1",
                   color: "#fff",
                   border: "none",
-                  cursor: canUseSelection ? "pointer" : "not-allowed"
+                  cursor: canUseSelection && commentDraft.trim() ? "pointer" : "not-allowed",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  boxShadow:
+                    canUseSelection && commentDraft.trim()
+                      ? "0 4px 12px rgba(99, 102, 241, 0.4)"
+                      : "none"
                 }}>
-                保存笔记（占位）
+                💾 Save Note
+              </button>
+              <button
+                disabled={!commentDraft.trim()}
+                onClick={() => setCommentDraft("")}
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  background: "#fff",
+                  color: "#6b7280",
+                  border: "2px solid #e5e7eb",
+                  cursor: commentDraft.trim() ? "pointer" : "not-allowed",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={(e) => {
+                  if (commentDraft.trim()) {
+                    e.currentTarget.style.borderColor = "#f87171"
+                    e.currentTarget.style.color = "#ef4444"
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "#e5e7eb"
+                  e.currentTarget.style.color = "#6b7280"
+                }}>
+                🗑️
               </button>
             </div>
-            <div style={{ marginTop: 10 }}>
-              <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>输出</div>
+            <div style={{ marginTop: 16 }}>
+              <div
+                style={{
+                  color: "#6b7280",
+                  fontSize: 11,
+                  marginBottom: 8,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }}>
+                💡 Output
+              </div>
               <div
                 style={{
                   whiteSpace: "pre-wrap",
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  padding: 10,
-                  border: "1px solid #e5e7eb",
+                  fontSize: 13,
+                  lineHeight: "22px",
+                  padding: 16,
+                  border: "2px solid #e5e7eb",
                   borderRadius: 10,
-                  minHeight: 80
+                  minHeight: 120,
+                  background: "#fff",
+                  color: "#374151"
                 }}>
-                {output || "（尚无输出）"}
+                {output || (
+                  <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
+                    Saved notes will appear here...
+                  </span>
+                )}
               </div>
             </div>
           </div>

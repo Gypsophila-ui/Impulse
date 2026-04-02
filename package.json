@@ -10,6 +10,7 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "openai": "^6.33.0",
     "plasmo": "0.90.5",
     "react": "18.2.0",
     "react-dom": "18.2.0"
@@ -28,14 +29,18 @@
       "default_title": "打开 Impulse 侧栏"
     },
     "host_permissions": [
-      "https://*/*"
+      "https://*/*",
+      "http://*/*",
+      "file://*/*"
     ],
     "side_panel": {
       "default_path": "sidepanel.html"
     },
     "permissions": [
       "sidePanel",
-      "scripting"
+      "scripting",
+      "activeTab",
+      "storage"
     ]
   }
 }

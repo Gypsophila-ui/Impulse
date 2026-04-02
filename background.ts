@@ -16,94 +16,18 @@ const configureSidePanelForTab = async (tabId: number) => {
   try {
     if (!("sidePanel" in chrome)) return
 
-    // #region debug log: background configuring side panel
-    fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "90a69d"
-      },
-      body: JSON.stringify({
-        sessionId: "90a69d",
-        runId: "post-fix",
-        hypothesisId: "H1",
-        location: "background.ts:configureSidePanelForTab:start",
-        message: "setOptions sidepanel for tab",
-        data: { tabId },
-        timestamp: Date.now()
-      })
-    }).catch(() => {})
-    // #endregion
-
     await chrome.sidePanel.setOptions({
       tabId,
       path: "sidepanel.html",
       enabled: true
     })
-
-    // #region debug log: background side panel configured
-    fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "90a69d"
-      },
-      body: JSON.stringify({
-        sessionId: "90a69d",
-        runId: "post-fix",
-        hypothesisId: "H1",
-        location: "background.ts:configureSidePanelForTab:success",
-        message: "setOptions ok (no auto open)",
-        data: { tabId },
-        timestamp: Date.now()
-      })
-    }).catch(() => {})
-    // #endregion
   } catch (e: any) {
-    // #region debug log: background setOptions failed
-    fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "90a69d"
-      },
-      body: JSON.stringify({
-        sessionId: "90a69d",
-        runId: "post-fix",
-        hypothesisId: "H1",
-        location: "background.ts:configureSidePanelForTab:error",
-        message: "setOptions failed",
-        data: {
-          error: e?.message ?? String(e),
-          name: e?.name
-        },
-        timestamp: Date.now()
-      })
-    }).catch(() => {})
-    // #endregion
+    // Silently handle errors
   }
 }
 
 const handleTab = (tabId: number, url?: string) => {
   if (!isProbablyPdfUrl(url)) return
-  // #region debug log: background matched pdf url
-  fetch("http://127.0.0.1:7737/ingest/52952637-7620-4e97-8ad5-b06f4329efb4", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "90a69d"
-    },
-    body: JSON.stringify({
-      sessionId: "90a69d",
-      runId: "debug_001",
-      hypothesisId: "H1",
-      location: "background.ts:handleTab",
-      message: "matched pdf url",
-      data: { tabId, url },
-      timestamp: Date.now()
-    })
-  }).catch(() => {})
-  // #endregion
   void configureSidePanelForTab(tabId)
 }
 
