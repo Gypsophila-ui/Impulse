@@ -85,7 +85,7 @@ export default function Options() {
     <div
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
         padding: "40px 20px",
         fontFamily:
           'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial'
@@ -108,8 +108,8 @@ export default function Options() {
         }
         input:focus, select:focus {
           outline: none;
-          border-color: #667eea !important;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          border-color: #3b82f6 !important;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
       `}</style>
 
@@ -126,7 +126,7 @@ export default function Options() {
         {/* Header */}
         <div
           style={{
-            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
             padding: "32px",
             color: "#fff",
             textAlign: "center"
@@ -275,7 +275,7 @@ export default function Options() {
                 background:
                   saving || !apiKey.trim()
                     ? "#cbd5e1"
-                    : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    : "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
                 color: "#fff",
                 border: "none",
                 borderRadius: 10,
@@ -284,7 +284,7 @@ export default function Options() {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
-                boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)"
+                boxShadow: "0 4px 12px rgba(59, 130, 246, 0.4)"
               }}>
               {saving ? (
                 <>
@@ -367,7 +367,7 @@ export default function Options() {
               href="https://platform.openai.com/docs"
               target="_blank"
               rel="noreferrer"
-              style={{ color: "#667eea", textDecoration: "underline" }}>
+              style={{ color: "#3b82f6", textDecoration: "underline" }}>
               OpenAI Documentation
             </a>
           </div>

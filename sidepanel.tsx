@@ -124,7 +124,7 @@ export default function Sidepanel() {
         style={{
           padding: "16px",
           borderBottom: "1px solid #e5e7eb",
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
           color: "#fff",
           boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)"
         }}>
@@ -181,7 +181,7 @@ export default function Sidepanel() {
                   borderRadius: 8,
                   border: "none",
                   background: isActive ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.15)",
-                  color: isActive ? "#667eea" : "rgba(255, 255, 255, 0.9)",
+                  color: isActive ? "#3b82f6" : "rgba(255, 255, 255, 0.9)",
                   cursor: "pointer",
                   backdropFilter: "blur(10px)",
                   boxShadow: isActive ? "0 2px 8px rgba(0, 0, 0, 0.1)" : "none",
@@ -275,7 +275,7 @@ export default function Sidepanel() {
               transition: “border-color 0.2s ease”,
               outline: “none”
             }}
-            onFocus={(e) => (e.target.style.borderColor = “#667eea”)}
+            onFocus={(e) => (e.target.style.borderColor = “#3b82f6”)}
             onBlur={(e) => (e.target.style.borderColor = “#e5e7eb”)}
           />
           {selectedText && (
@@ -315,7 +315,7 @@ export default function Sidepanel() {
                 borderRadius: 10,
                 background:
                   canUseSelection && !loading
-                    ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                    ? "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"
                     : "#cbd5e1",
                 color: "#fff",
                 border: "none",
@@ -327,7 +327,7 @@ export default function Sidepanel() {
                 justifyContent: "center",
                 gap: 8,
                 boxShadow:
-                  canUseSelection && !loading ? "0 4px 12px rgba(102, 126, 234, 0.4)" : "none"
+                  canUseSelection && !loading ? "0 4px 12px rgba(59, 130, 246, 0.4)" : "none"
               }}>
               {loading ? (
                 <>
@@ -596,7 +596,7 @@ export default function Sidepanel() {
                 transition: "border-color 0.2s ease",
                 outline: "none"
               }}
-              onFocus={(e) => (e.target.style.borderColor = "#667eea")}
+              onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
               onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
             />
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -616,7 +616,7 @@ export default function Sidepanel() {
                   borderRadius: 10,
                   background:
                     canUseSelection && commentDraft.trim()
-                      ? "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)"
+                      ? "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"
                       : "#cbd5e1",
                   color: "#fff",
                   border: "none",
@@ -629,7 +629,7 @@ export default function Sidepanel() {
                   gap: 8,
                   boxShadow:
                     canUseSelection && commentDraft.trim()
-                      ? "0 4px 12px rgba(99, 102, 241, 0.4)"
+                      ? "0 4px 12px rgba(59, 130, 246, 0.4)"
                       : "none"
                 }}>
                 💾 Save Note
