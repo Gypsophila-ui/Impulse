@@ -62,9 +62,17 @@
   - 时间格式化显示（Just now, 5m ago, etc.）
   - 本地持久化存储（chrome.storage.local）
 
+- [x] **Highlight 功能：AI 智能高亮** (2026-04-02)
+  - AI 生成关键短语（3-7个关键概念）
+  - 页面实时高亮显示（黄色背景）
+  - 跨 iframe 支持（处理 PDF 嵌入）
+  - 高亮管理（查看、删除、重新应用）
+  - 批量操作（清除所有、重新应用）
+  - 本地持久化存储
+  - Content script 注入（contents/highlight.ts）
+
 ### 待实现功能（Phase 2）
-- [ ] Highlight：生成高亮建议并映射回页面
-  - 位置：`sidepanel.tsx` - 需要 DOM 定位和注入
+- [ ] 多语言 UI 支持（英文/中文切换）
 
 ### 技术债务
 - **依赖管理**

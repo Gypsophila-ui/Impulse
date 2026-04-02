@@ -67,6 +67,51 @@ export async function translate(
   return response.choices[0]?.message?.content || "翻译失败"
 }
 
+/**
+ * Generate highlight suggestions for selected text
+ * Returns an array of key phrases that should be highlighted
+ */
+export async function generateHighlights(text: string): Promise<string[]> {
+  const client = await getClient()
+  const config = await getLLMConfig()
+
+  const response = await client.chat.completions.create({
+    model: config?.model || "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a reading assistant that identifies the most important phrases in academic text. Extract 3-7 key phrases (each 2-10 words) that represent the core concepts. Return ONLY a JSON array of strings, no explanations."
+      },
+      {
+        role: "user",
+        content: `Extract key phrases from this text:\n\n${text}`
+      }
+    ],
+    temperature: 0.3,
+    max_tokens: 300
+  })
+
+  const content = response.choices[0]?.message?.content || "[]"
+
+  try {
+    // Parse JSON response
+    const phrases = JSON.parse(content)
+    if (Array.isArray(phrases)) {
+      return phrases.filter((p) => typeof p === "string" && p.length > 0).slice(0, 7)
+    }
+  } catch (e) {
+    // If not valid JSON, try to extract phrases from text
+    const lines = content
+      .split("\n")
+      .map((line) => line.trim().replace(/^[-*•]\s*/, "").replace(/^["']|["']$/g, ""))
+      .filter((line) => line.length > 3 && line.length < 100)
+    return lines.slice(0, 7)
+  }
+
+  return []
+}
+
 // Reset client when config changes
 export function resetClient(): void {
   openaiClient = null

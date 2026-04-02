@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react"
 
 import { getSelectionInTab } from "~utils/get-selection"
-import { summarize, translate } from "~utils/llm-client"
+import { generateHighlights, summarize, translate } from "~utils/llm-client"
 import {
+  deleteHighlight,
+  deleteHighlightsByUrl,
   deleteNote,
+  getHighlightsByUrl,
   getNotesByUrl,
   hasApiKey,
+  saveHighlights,
   saveNote,
   updateNote,
+  type Highlight,
   type Note
 } from "~utils/storage"
 
@@ -76,6 +81,12 @@ export default function Sidepanel() {
   const [savingNote, setSavingNote] = useState(false)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
 
+  // Highlights state
+  const [highlights, setHighlights] = useState<Highlight[]>([])
+  const [generatingHighlights, setGeneratingHighlights] = useState(false)
+  const [applyingHighlights, setApplyingHighlights] = useState(false)
+  const [currentTabId, setCurrentTabId] = useState<number | null>(null)
+
   const fetchSelection = async () => {
     setLoadingSelection(true)
     setError(null)
@@ -105,6 +116,7 @@ export default function Sidepanel() {
       if (tab?.url) {
         setCurrentUrl(tab.url)
         setCurrentTitle(tab.title || "Untitled")
+        setCurrentTabId(tab.id || null)
         const pageNotes = await getNotesByUrl(tab.url)
         setNotes(pageNotes)
       }
@@ -113,9 +125,60 @@ export default function Sidepanel() {
     }
   }
 
+  const loadHighlights = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (tab?.url) {
+        const pageHighlights = await getHighlightsByUrl(tab.url)
+        setHighlights(pageHighlights)
+      }
+    } catch (e) {
+      console.error("Failed to load highlights:", e)
+    }
+  }
+
+  const applyHighlightsToPage = async (phrases: string[]) => {
+    if (!currentTabId) return
+
+    try {
+      setApplyingHighlights(true)
+
+      // Send message to all frames in the tab
+      const response = await chrome.tabs.sendMessage(currentTabId, {
+        type: "APPLY_HIGHLIGHTS",
+        phrases,
+        color: "#fef08a"
+      })
+
+      if (response?.success) {
+        setOutput(`✅ Applied ${response.count} highlights on the page!`)
+        setTimeout(() => setOutput(""), 3000)
+      } else {
+        setOutput(`⚠️ ${response?.error || "Failed to apply highlights"}`)
+      }
+    } catch (e: any) {
+      setOutput(`❌ Failed to apply highlights: ${e?.message ?? String(e)}`)
+    } finally {
+      setApplyingHighlights(false)
+    }
+  }
+
+  const clearHighlightsFromPage = async () => {
+    if (!currentTabId) return
+
+    try {
+      await chrome.tabs.sendMessage(currentTabId, {
+        type: "CLEAR_HIGHLIGHTS"
+      })
+    } catch (e) {
+      console.error("Failed to clear highlights:", e)
+    }
+  }
+
   useEffect(() => {
     void fetchSelection()
     void loadNotes()
+    void loadHighlights()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -127,6 +190,8 @@ export default function Sidepanel() {
   useEffect(() => {
     if (activeTab === "comment") {
       void loadNotes()
+    } else if (activeTab === "highlight") {
+      void loadHighlights()
     }
   }, [activeTab])
 
@@ -512,86 +577,285 @@ export default function Sidepanel() {
 
         {activeTab === "highlight" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
-            <div
-              style={{
-                padding: 12,
-                background: "#fef3c7",
-                border: "1px solid #fcd34d",
-                borderRadius: 8,
-                marginBottom: 16,
-                fontSize: 12,
-                color: "#92400e",
-                display: "flex",
-                alignItems: "start",
-                gap: 8
-              }}>
-              <div style={{ fontSize: 16 }}>🚧</div>
-              <div>
-                <strong>Coming Soon!</strong>
-                <br />
-                This feature will generate smart highlight suggestions based on your selected text.
-              </div>
-            </div>
+            {/* Generate highlights button */}
             <button
-              disabled={!canUseSelection}
+              disabled={!canUseSelection || !hasKey || generatingHighlights}
               className="btn-hover"
-              onClick={() => {
-                setOutput(
-                  canUseSelection
-                    ? "🚧 Feature in development\n\nThis will generate intelligent highlight suggestions and map them back to the PDF page."
-                    : "⚠️ Please select text first."
-                )
+              onClick={async () => {
+                if (!hasKey) {
+                  setOutput(
+                    "⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first:\n1. Right-click extension icon\n2. Select 'Options'\n3. Enter your API Key"
+                  )
+                  return
+                }
+
+                if (!canUseSelection) {
+                  setOutput("⚠️ Please select text first")
+                  return
+                }
+
+                setGeneratingHighlights(true)
+                setOutput("✨ Analyzing text and generating highlights...")
+
+                try {
+                  // Generate highlights using LLM
+                  const phrases = await generateHighlights(selectedText)
+
+                  if (phrases.length === 0) {
+                    setOutput("⚠️ No key phrases found in the selected text")
+                    return
+                  }
+
+                  // Save highlights to storage
+                  const saved = await saveHighlights(
+                    phrases,
+                    selectedText,
+                    currentUrl,
+                    currentTitle
+                  )
+
+                  // Apply highlights to the page
+                  await applyHighlightsToPage(phrases)
+
+                  // Reload highlights list
+                  await loadHighlights()
+
+                  setOutput(
+                    `✅ Generated ${phrases.length} highlights!\n\nKey phrases:\n${phrases.map((p, i) => `${i + 1}. ${p}`).join("\n")}`
+                  )
+                } catch (e: any) {
+                  setOutput(`❌ Failed to generate highlights:\n\n${e?.message ?? String(e)}`)
+                } finally {
+                  setGeneratingHighlights(false)
+                }
               }}
               style={{
                 width: "100%",
                 padding: "12px 16px",
                 borderRadius: 10,
-                background: canUseSelection
-                  ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
-                  : "#cbd5e1",
-                color: canUseSelection ? "#fff" : "#64748b",
+                background:
+                  canUseSelection && hasKey && !generatingHighlights
+                    ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
+                    : "#cbd5e1",
+                color: "#fff",
                 border: "none",
-                cursor: canUseSelection ? "pointer" : "not-allowed",
+                cursor:
+                  canUseSelection && hasKey && !generatingHighlights ? "pointer" : "not-allowed",
                 fontWeight: 600,
                 fontSize: 13,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
-                boxShadow: canUseSelection ? "0 4px 12px rgba(245, 158, 11, 0.4)" : "none"
+                boxShadow:
+                  canUseSelection && hasKey && !generatingHighlights
+                    ? "0 4px 12px rgba(245, 158, 11, 0.4)"
+                    : "none"
               }}>
-              ✨ Generate Highlights
+              {generatingHighlights ? (
+                <>
+                  <Spinner /> Generating...
+                </>
+              ) : (
+                <>✨ Generate Highlights</>
+              )}
             </button>
-            <div style={{ marginTop: 16 }}>
+
+            {/* Status message */}
+            {output && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 8,
+                  background: output.startsWith("✅")
+                    ? "#d1fae5"
+                    : output.startsWith("⚠️")
+                      ? "#fef3c7"
+                      : "#fee2e2",
+                  color: output.startsWith("✅")
+                    ? "#065f46"
+                    : output.startsWith("⚠️")
+                      ? "#92400e"
+                      : "#991b1b",
+                  fontSize: 12,
+                  lineHeight: "18px",
+                  whiteSpace: "pre-wrap",
+                  animation: "fadeIn 0.3s ease"
+                }}>
+                {output}
+              </div>
+            )}
+
+            {/* Highlights list */}
+            <div style={{ marginTop: 20 }}>
               <div
                 style={{
                   color: "#6b7280",
                   fontSize: 11,
-                  marginBottom: 8,
+                  marginBottom: 12,
                   fontWeight: 600,
                   textTransform: "uppercase",
-                  letterSpacing: "0.5px"
+                  letterSpacing: "0.5px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between"
                 }}>
-                💡 Output
-              </div>
-              <div
-                style={{
-                  whiteSpace: "pre-wrap",
-                  fontSize: 13,
-                  lineHeight: "22px",
-                  padding: 16,
-                  border: "2px solid #e5e7eb",
-                  borderRadius: 10,
-                  minHeight: 120,
-                  background: "#fff",
-                  color: "#374151"
-                }}>
-                {output || (
-                  <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
-                    Highlight suggestions will appear here...
-                  </span>
+                <span>✨ Active Highlights ({highlights.length})</span>
+                {highlights.length > 0 && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={async () => {
+                        await clearHighlightsFromPage()
+                        setOutput("✅ Cleared highlights from page")
+                        setTimeout(() => setOutput(""), 2000)
+                      }}
+                      disabled={applyingHighlights}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#3b82f6",
+                        cursor: applyingHighlights ? "not-allowed" : "pointer",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: 4
+                      }}>
+                      {applyingHighlights ? "Applying..." : "Reapply"}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Delete all ${highlights.length} highlights for this page?`)) {
+                          try {
+                            await deleteHighlightsByUrl(currentUrl)
+                            await clearHighlightsFromPage()
+                            await loadHighlights()
+                            setOutput("✅ All highlights deleted")
+                            setTimeout(() => setOutput(""), 2000)
+                          } catch (e: any) {
+                            setOutput(`❌ Failed to delete: ${e?.message ?? String(e)}`)
+                          }
+                        }
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#ef4444",
+                        cursor: "pointer",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: 4
+                      }}>
+                      Clear All
+                    </button>
+                  </div>
                 )}
               </div>
+
+              {highlights.length === 0 ? (
+                <div
+                  style={{
+                    padding: 20,
+                    border: "2px dashed #e5e7eb",
+                    borderRadius: 10,
+                    textAlign: "center",
+                    color: "#9ca3af",
+                    fontSize: 13
+                  }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>✨</div>
+                  <div>No highlights yet</div>
+                  <div style={{ fontSize: 11, marginTop: 4 }}>
+                    Select text and generate smart highlights!
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {highlights.map((highlight) => (
+                    <div
+                      key={highlight.id}
+                      style={{
+                        padding: 10,
+                        border: "2px solid #fcd34d",
+                        borderRadius: 8,
+                        background: "#fefce8",
+                        transition: "all 0.2s ease"
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = "#f59e0b"
+                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(245, 158, 11, 0.15)"
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = "#fcd34d"
+                        e.currentTarget.style.boxShadow = "none"
+                      }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "start",
+                          justifyContent: "space-between",
+                          gap: 8
+                        }}>
+                        <div style={{ flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: "#92400e",
+                              fontWeight: 600,
+                              marginBottom: 4,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6
+                            }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                width: 6,
+                                height: 6,
+                                borderRadius: "50%",
+                                background: "#f59e0b"
+                              }}
+                            />
+                            {highlight.phrase}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>
+                            {formatDate(highlight.timestamp)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (confirm("Delete this highlight?")) {
+                              try {
+                                await deleteHighlight(highlight.id)
+                                await loadHighlights()
+                                // Reapply remaining highlights
+                                const remaining = highlights.filter((h) => h.id !== highlight.id)
+                                if (remaining.length > 0) {
+                                  await applyHighlightsToPage(remaining.map((h) => h.phrase))
+                                } else {
+                                  await clearHighlightsFromPage()
+                                }
+                                setOutput("✅ Highlight deleted")
+                                setTimeout(() => setOutput(""), 2000)
+                              } catch (e: any) {
+                                setOutput(`❌ Failed to delete: ${e?.message ?? String(e)}`)
+                              }
+                            }
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: 4,
+                            fontSize: 14,
+                            color: "#ef4444"
+                          }}
+                          title="Delete">
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

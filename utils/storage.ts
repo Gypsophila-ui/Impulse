@@ -18,9 +18,20 @@ export interface Note {
   updatedAt?: number // 更新时间
 }
 
+export interface Highlight {
+  id: string // 唯一标识
+  phrase: string // 要高亮的短语
+  sourceText: string // 原始选中文本
+  url: string // PDF URL
+  pageTitle: string // 页面标题
+  timestamp: number // 创建时间
+  color?: string // 高亮颜色（可选）
+}
+
 const STORAGE_KEYS = {
   LLM_CONFIG: "llm_config",
-  NOTES: "notes"
+  NOTES: "notes",
+  HIGHLIGHTS: "highlights"
 } as const
 
 export async function saveLLMConfig(config: LLMConfig): Promise<void> {
@@ -134,4 +145,88 @@ export async function getNoteById(id: string): Promise<Note | null> {
  */
 export async function clearAllNotes(): Promise<void> {
   await chrome.storage.local.remove(STORAGE_KEYS.NOTES)
+}
+
+// ============= Highlights Management =============
+
+/**
+ * Generate a unique ID for a highlight
+ */
+function generateHighlightId(): string {
+  return `highlight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
+/**
+ * Get all highlights, sorted by timestamp (newest first)
+ */
+export async function getAllHighlights(): Promise<Highlight[]> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.HIGHLIGHTS)
+  const highlights = (result[STORAGE_KEYS.HIGHLIGHTS] || []) as Highlight[]
+  return highlights.sort((a, b) => b.timestamp - a.timestamp)
+}
+
+/**
+ * Get highlights for a specific URL
+ */
+export async function getHighlightsByUrl(url: string): Promise<Highlight[]> {
+  const allHighlights = await getAllHighlights()
+  return allHighlights.filter((h) => h.url === url)
+}
+
+/**
+ * Save multiple highlights
+ */
+export async function saveHighlights(
+  phrases: string[],
+  sourceText: string,
+  url: string,
+  pageTitle: string,
+  color: string = "#fef08a"
+): Promise<Highlight[]> {
+  const highlights = await getAllHighlights()
+  const newHighlights: Highlight[] = phrases.map((phrase) => ({
+    id: generateHighlightId(),
+    phrase,
+    sourceText,
+    url,
+    pageTitle,
+    timestamp: Date.now(),
+    color
+  }))
+
+  highlights.push(...newHighlights)
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.HIGHLIGHTS]: highlights
+  })
+
+  return newHighlights
+}
+
+/**
+ * Delete a highlight
+ */
+export async function deleteHighlight(id: string): Promise<void> {
+  const highlights = await getAllHighlights()
+  const filtered = highlights.filter((h) => h.id !== id)
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.HIGHLIGHTS]: filtered
+  })
+}
+
+/**
+ * Delete all highlights for a URL
+ */
+export async function deleteHighlightsByUrl(url: string): Promise<void> {
+  const highlights = await getAllHighlights()
+  const filtered = highlights.filter((h) => h.url !== url)
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.HIGHLIGHTS]: filtered
+  })
+}
+
+/**
+ * Clear all highlights
+ */
+export async function clearAllHighlights(): Promise<void> {
+  await chrome.storage.local.remove(STORAGE_KEYS.HIGHLIGHTS)
 }
