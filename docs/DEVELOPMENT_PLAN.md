@@ -52,11 +52,19 @@
   - Options 页面全新设计（卡片式布局、show/hide API key）
   - 响应式布局优化
 
+### 已完成功能（Phase 2）✅
+- [x] **Comment 功能：笔记保存与管理** (2026-04-02)
+  - 完整的 CRUD 操作（创建、读取、更新、删除）
+  - 笔记关联选中文本和 URL
+  - 笔记列表显示（按时间倒序）
+  - 编辑已有笔记功能
+  - 删除单个或全部笔记
+  - 时间格式化显示（Just now, 5m ago, etc.）
+  - 本地持久化存储（chrome.storage.local）
+
 ### 待实现功能（Phase 2）
 - [ ] Highlight：生成高亮建议并映射回页面
   - 位置：`sidepanel.tsx` - 需要 DOM 定位和注入
-- [ ] Comment：保存笔记并关联选中文本
-  - 位置：`sidepanel.tsx` - 需要持久化存储方案
 
 ### 技术债务
 - **依赖管理**
