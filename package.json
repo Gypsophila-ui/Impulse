@@ -42,7 +42,8 @@
       "sidePanel",
       "scripting",
       "activeTab",
-      "storage"
+      "storage",
+      "clipboardRead"
     ]
   }
 }

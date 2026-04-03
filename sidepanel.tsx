@@ -7,7 +7,6 @@ import { getCurrentLanguage, setCurrentLanguage, t } from "~utils/i18n"
 import {
   chatWithContext,
   extractMetadata,
-  generateHighlights,
   summarize,
   translate
 } from "~utils/llm-client"
@@ -135,10 +134,12 @@ export default function Sidepanel() {
 
       const text = await getSelectionInTab(tab.id)
 
-      setSelectedText((prev) => (isSameText(prev, text) ? prev : text))
-
-      // 切到不同栏目时，output 的语义会变化：这里简单清空，避免"上一个 tab 的输出污染当前 tab"。
-      setOutput("")
+      if (text) {
+        setSelectedText((prev) => (isSameText(prev, text) ? prev : text))
+        setOutput("")
+      } else {
+        setError("未检测到选中文本。请先在 PDF 中选中文本并按 Ctrl+C 复制，然后再点刷新。也可以直接在下方文本框粘贴。")
+      }
     } catch (e: any) {
       setError(e?.message ?? "读取选中文本失败")
     } finally {
@@ -730,9 +731,9 @@ export default function Sidepanel() {
             📄 {t("common.selectedText")}
           </div>
           <textarea
-            readOnly
             value={selectedText}
-            placeholder={t("common.selectTextHint")}
+            onChange={(e) => setSelectedText(e.target.value)}
+            placeholder="1. Select text in PDF → Ctrl+C → click Refresh\n2. Or paste text here directly (Ctrl+V)"
             style={{
               width: "100%",
               minHeight: 100,
@@ -933,54 +934,36 @@ export default function Sidepanel() {
 
         {activeTab === "highlight" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
-            {/* Generate highlights button */}
+            {/* Highlight selected text button */}
             <button
-              disabled={!canUseSelection || !hasKey || generatingHighlights}
+              disabled={!canUseSelection || generatingHighlights}
               className="btn-hover"
               onClick={async () => {
-                if (!hasKey) {
-                  setOutput(
-                    "⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first:\n1. Right-click extension icon\n2. Select 'Options'\n3. Enter your API Key"
-                  )
-                  return
-                }
-
                 if (!canUseSelection) {
                   setOutput("⚠️ Please select text first")
                   return
                 }
 
                 setGeneratingHighlights(true)
-                setOutput("✨ Analyzing text and generating highlights...")
 
                 try {
-                  // Generate highlights using LLM
-                  const phrases = await generateHighlights(selectedText)
-
-                  if (phrases.length === 0) {
-                    setOutput("⚠️ No key phrases found in the selected text")
-                    return
-                  }
-
-                  // Save highlights to storage
-                  const saved = await saveHighlights(
-                    phrases,
+                  // Save highlight to storage
+                  await saveHighlights(
+                    [selectedText],
                     selectedText,
                     currentUrl,
                     currentTitle
                   )
 
-                  // Apply highlights to the page
-                  await applyHighlightsToPage(phrases)
+                  // Apply highlight to the page
+                  await applyHighlightsToPage([selectedText])
 
                   // Reload highlights list
                   await loadHighlights()
 
-                  setOutput(
-                    `✅ Generated ${phrases.length} highlights!\n\nKey phrases:\n${phrases.map((p, i) => `${i + 1}. ${p}`).join("\n")}`
-                  )
+                  setOutput("✅ Highlighted successfully!")
                 } catch (e: any) {
-                  setOutput(`❌ Failed to generate highlights:\n\n${e?.message ?? String(e)}`)
+                  setOutput(`❌ Failed to highlight:\n\n${e?.message ?? String(e)}`)
                 } finally {
                   setGeneratingHighlights(false)
                 }
@@ -990,13 +973,13 @@ export default function Sidepanel() {
                 padding: "12px 16px",
                 borderRadius: 10,
                 background:
-                  canUseSelection && hasKey && !generatingHighlights
+                  canUseSelection && !generatingHighlights
                     ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
                     : "#cbd5e1",
                 color: "#fff",
                 border: "none",
                 cursor:
-                  canUseSelection && hasKey && !generatingHighlights ? "pointer" : "not-allowed",
+                  canUseSelection && !generatingHighlights ? "pointer" : "not-allowed",
                 fontWeight: 600,
                 fontSize: 13,
                 display: "flex",
@@ -1004,16 +987,16 @@ export default function Sidepanel() {
                 justifyContent: "center",
                 gap: 8,
                 boxShadow:
-                  canUseSelection && hasKey && !generatingHighlights
+                  canUseSelection && !generatingHighlights
                     ? "0 4px 12px rgba(245, 158, 11, 0.4)"
                     : "none"
               }}>
               {generatingHighlights ? (
                 <>
-                  <Spinner /> Generating...
+                  <Spinner /> Highlighting...
                 </>
               ) : (
-                <>✨ Generate Highlights</>
+                <>✨ {t("highlight.title")}</>
               )}
             </button>
 
@@ -1120,7 +1103,7 @@ export default function Sidepanel() {
                   <div style={{ fontSize: 32, marginBottom: 8 }}>✨</div>
                   <div>No highlights yet</div>
                   <div style={{ fontSize: 11, marginTop: 4 }}>
-                    Select text and generate smart highlights!
+                    Select text and click to highlight!
                   </div>
                 </div>
               ) : (
