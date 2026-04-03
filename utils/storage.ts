@@ -2,6 +2,8 @@
  * Chrome storage utility for persisting configuration and API keys
  */
 
+import type { ChatMessage, ChatSession, Language, PaperMetadata, Theme } from "~types"
+
 export interface LLMConfig {
   provider: "openai"
   apiKey: string
@@ -9,29 +11,33 @@ export interface LLMConfig {
 }
 
 export interface Note {
-  id: string // 唯一标识
-  selectedText: string // 选中的文本
-  comment: string // 用户评论
-  url: string // PDF URL
-  pageTitle: string // 页面标题
-  timestamp: number // 创建时间
-  updatedAt?: number // 更新时间
+  id: string
+  selectedText: string
+  comment: string
+  url: string
+  pageTitle: string
+  timestamp: number
+  updatedAt?: number
 }
 
 export interface Highlight {
-  id: string // 唯一标识
-  phrase: string // 要高亮的短语
-  sourceText: string // 原始选中文本
-  url: string // PDF URL
-  pageTitle: string // 页面标题
-  timestamp: number // 创建时间
-  color?: string // 高亮颜色（可选）
+  id: string
+  phrase: string
+  sourceText: string
+  url: string
+  pageTitle: string
+  timestamp: number
+  color?: string
 }
 
 const STORAGE_KEYS = {
   LLM_CONFIG: "llm_config",
   NOTES: "notes",
-  HIGHLIGHTS: "highlights"
+  HIGHLIGHTS: "highlights",
+  CHAT_SESSIONS: "chat_sessions",
+  METADATA: "metadata",
+  UI_LANGUAGE: "ui_language",
+  UI_THEME: "ui_theme"
 } as const
 
 export async function saveLLMConfig(config: LLMConfig): Promise<void> {
@@ -229,4 +235,102 @@ export async function deleteHighlightsByUrl(url: string): Promise<void> {
  */
 export async function clearAllHighlights(): Promise<void> {
   await chrome.storage.local.remove(STORAGE_KEYS.HIGHLIGHTS)
+}
+
+// ============= Chat Sessions Management =============
+
+function generateSessionId(): string {
+  return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
+export async function getChatSessionByUrl(url: string): Promise<ChatSession | null> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.CHAT_SESSIONS)
+  const sessions = (result[STORAGE_KEYS.CHAT_SESSIONS] || []) as ChatSession[]
+  return sessions.find((s) => s.url === url) || null
+}
+
+export async function saveChatSession(
+  url: string,
+  pageTitle: string,
+  messages: ChatMessage[],
+  paperContext: string
+): Promise<ChatSession> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.CHAT_SESSIONS)
+  const sessions = (result[STORAGE_KEYS.CHAT_SESSIONS] || []) as ChatSession[]
+
+  const existingIndex = sessions.findIndex((s) => s.url === url)
+  if (existingIndex !== -1) {
+    sessions[existingIndex].messages = messages
+    sessions[existingIndex].paperContext = paperContext
+    sessions[existingIndex].timestamp = Date.now()
+    await chrome.storage.local.set({ [STORAGE_KEYS.CHAT_SESSIONS]: sessions })
+    return sessions[existingIndex]
+  }
+
+  const newSession: ChatSession = {
+    id: generateSessionId(),
+    url,
+    pageTitle,
+    messages,
+    paperContext,
+    timestamp: Date.now()
+  }
+  sessions.push(newSession)
+  await chrome.storage.local.set({ [STORAGE_KEYS.CHAT_SESSIONS]: sessions })
+  return newSession
+}
+
+export async function deleteChatSession(url: string): Promise<void> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.CHAT_SESSIONS)
+  const sessions = (result[STORAGE_KEYS.CHAT_SESSIONS] || []) as ChatSession[]
+  const filtered = sessions.filter((s) => s.url !== url)
+  await chrome.storage.local.set({ [STORAGE_KEYS.CHAT_SESSIONS]: filtered })
+}
+
+// ============= Metadata Management =============
+
+interface StoredMetadata {
+  url: string
+  metadata: PaperMetadata
+  timestamp: number
+}
+
+export async function getMetadataByUrl(url: string): Promise<PaperMetadata | null> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.METADATA)
+  const all = (result[STORAGE_KEYS.METADATA] || []) as StoredMetadata[]
+  return all.find((m) => m.url === url)?.metadata || null
+}
+
+export async function saveMetadata(url: string, metadata: PaperMetadata): Promise<void> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.METADATA)
+  const all = (result[STORAGE_KEYS.METADATA] || []) as StoredMetadata[]
+  const existingIndex = all.findIndex((m) => m.url === url)
+  const entry: StoredMetadata = { url, metadata, timestamp: Date.now() }
+
+  if (existingIndex !== -1) {
+    all[existingIndex] = entry
+  } else {
+    all.push(entry)
+  }
+  await chrome.storage.local.set({ [STORAGE_KEYS.METADATA]: all })
+}
+
+// ============= UI Preferences =============
+
+export async function getLanguage(): Promise<Language> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.UI_LANGUAGE)
+  return (result[STORAGE_KEYS.UI_LANGUAGE] as Language) || "en"
+}
+
+export async function setLanguage(lang: Language): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.UI_LANGUAGE]: lang })
+}
+
+export async function getTheme(): Promise<Theme> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.UI_THEME)
+  return (result[STORAGE_KEYS.UI_THEME] as Theme) || "light"
+}
+
+export async function setTheme(theme: Theme): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.UI_THEME]: theme })
 }

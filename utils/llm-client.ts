@@ -1,5 +1,6 @@
 import OpenAI from "openai"
 
+import type { ChatMessage, PaperMetadata } from "~types"
 import { getLLMConfig } from "~utils/storage"
 
 let openaiClient: OpenAI | null = null
@@ -110,6 +111,81 @@ export async function generateHighlights(text: string): Promise<string[]> {
   }
 
   return []
+}
+
+/**
+ * Multi-turn chat with paper context
+ */
+export async function chatWithContext(
+  messages: ChatMessage[],
+  paperContext: string
+): Promise<string> {
+  const client = await getClient()
+  const config = await getLLMConfig()
+
+  const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    {
+      role: "system",
+      content: `你是一个专业的学术论文助手。请根据用户提供的论文片段回答问题。使用中文回答，保持学术性和准确性。如果问题超出了提供的文本范围，请说明。
+
+论文片段：
+${paperContext}`
+    },
+    ...messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content
+    }))
+  ]
+
+  const response = await client.chat.completions.create({
+    model: config?.model || "gpt-4o-mini",
+    messages: apiMessages,
+    temperature: 0.5,
+    max_tokens: 800
+  })
+
+  return response.choices[0]?.message?.content || "无法生成回答"
+}
+
+/**
+ * Extract paper metadata from text
+ */
+export async function extractMetadata(text: string): Promise<PaperMetadata> {
+  const client = await getClient()
+  const config = await getLLMConfig()
+
+  const response = await client.chat.completions.create({
+    model: config?.model || "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          'You are a metadata extraction assistant. Extract paper metadata from the given text. Return ONLY a JSON object with these fields: title (string), authors (string array), year (string), journal (string), doi (string). Use empty string or empty array if not found.'
+      },
+      {
+        role: "user",
+        content: `Extract metadata from:\n\n${text}`
+      }
+    ],
+    temperature: 0.1,
+    max_tokens: 400
+  })
+
+  const content = response.choices[0]?.message?.content || "{}"
+
+  try {
+    const cleaned = content.replace(/```json\n?|\n?```/g, "").trim()
+    const parsed = JSON.parse(cleaned)
+    return {
+      title: parsed.title || "",
+      authors: Array.isArray(parsed.authors) ? parsed.authors : [],
+      year: parsed.year || "",
+      journal: parsed.journal || "",
+      doi: parsed.doi || ""
+    }
+  } catch {
+    return { title: "", authors: [], year: "", journal: "", doi: "" }
+  }
 }
 
 // Reset client when config changes

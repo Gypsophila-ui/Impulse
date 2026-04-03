@@ -33,7 +33,7 @@ const isExtensionContextValid = (): boolean => {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === “GET_SELECTION”) {
+  if (message?.type === "GET_SELECTION") {
     if (!isExtensionContextValid()) {
       return
     }
@@ -41,7 +41,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const text = getSelectionText()
 
     // 始终响应，避免当 selection 在顶层 frame 读取为空时，
-    // 请求端出现”Receiving end does not exist / 无反应”。
+    // 请求端出现"Receiving end does not exist / 无反应"。
     try {
       sendResponse({ text })
     } catch {

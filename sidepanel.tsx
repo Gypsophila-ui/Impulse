@@ -1,28 +1,47 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 
+import type { ChatMessage, Language, PaperMetadata, Theme } from "~types"
+import { downloadMarkdown, generateMarkdown } from "~utils/export"
 import { getSelectionInTab } from "~utils/get-selection"
-import { generateHighlights, summarize, translate } from "~utils/llm-client"
+import { getCurrentLanguage, setCurrentLanguage, t } from "~utils/i18n"
 import {
+  chatWithContext,
+  extractMetadata,
+  generateHighlights,
+  summarize,
+  translate
+} from "~utils/llm-client"
+import {
+  deleteChatSession,
   deleteHighlight,
   deleteHighlightsByUrl,
   deleteNote,
+  getChatSessionByUrl,
   getHighlightsByUrl,
+  getLanguage,
+  getMetadataByUrl,
   getNotesByUrl,
+  getTheme,
   hasApiKey,
+  saveChatSession,
   saveHighlights,
+  saveMetadata,
   saveNote,
+  setLanguage as storeLanguage,
+  setTheme as storeTheme,
   updateNote,
   type Highlight,
   type Note
 } from "~utils/storage"
 
-type TabKey = "summary" | "translation" | "highlight" | "comment"
+type TabKey = "summary" | "translation" | "highlight" | "comment" | "qa"
 
-const tabList: Array<{ key: TabKey; label: string; icon: string }> = [
-  { key: "summary", label: "Summary", icon: "📝" },
-  { key: "translation", label: "Translate", icon: "🌐" },
-  { key: "highlight", label: "Highlight", icon: "✨" },
-  { key: "comment", label: "Comment", icon: "💬" }
+const tabKeys: Array<{ key: TabKey; labelKey: string; icon: string }> = [
+  { key: "summary", labelKey: "tab.summary", icon: "📝" },
+  { key: "translation", labelKey: "tab.translate", icon: "🌐" },
+  { key: "highlight", labelKey: "tab.highlight", icon: "✨" },
+  { key: "comment", labelKey: "tab.comment", icon: "💬" },
+  { key: "qa", labelKey: "tab.qa", icon: "🤖" }
 ]
 
 // 加载动画组件
@@ -87,6 +106,23 @@ export default function Sidepanel() {
   const [applyingHighlights, setApplyingHighlights] = useState(false)
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
 
+  // Q&A Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState("")
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatContext, setChatContext] = useState("")
+  const chatEndRef = useRef<HTMLDivElement>(null)
+
+  // Metadata state
+  const [metadata, setMetadata] = useState<PaperMetadata | null>(null)
+  const [metadataExpanded, setMetadataExpanded] = useState(false)
+  const [extractingMetadata, setExtractingMetadata] = useState(false)
+
+  // i18n & Theme state
+  const [lang, setLang] = useState<Language>("en")
+  const [theme, setThemeState] = useState<Theme>("light")
+  const isDark = theme === "dark"
+
   const fetchSelection = async () => {
     setLoadingSelection(true)
     setError(null)
@@ -94,17 +130,17 @@ export default function Sidepanel() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
-        throw new Error(“未找到当前活动标签页”)
+        throw new Error("未找到当前活动标签页")
       }
 
       const text = await getSelectionInTab(tab.id)
 
       setSelectedText((prev) => (isSameText(prev, text) ? prev : text))
 
-      // 切到不同栏目时，output 的语义会变化：这里简单清空，避免”上一个 tab 的输出污染当前 tab”。
-      setOutput(“”)
+      // 切到不同栏目时，output 的语义会变化：这里简单清空，避免"上一个 tab 的输出污染当前 tab"。
+      setOutput("")
     } catch (e: any) {
-      setError(e?.message ?? “读取选中文本失败”)
+      setError(e?.message ?? "读取选中文本失败")
     } finally {
       setLoadingSelection(false)
     }
@@ -175,10 +211,92 @@ export default function Sidepanel() {
     }
   }
 
+  const loadChatSession = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (tab?.url) {
+        const session = await getChatSessionByUrl(tab.url)
+        if (session) {
+          setChatMessages(session.messages)
+          setChatContext(session.paperContext)
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load chat session:", e)
+    }
+  }
+
+  const loadMetadata = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (tab?.url) {
+        const stored = await getMetadataByUrl(tab.url)
+        if (stored) setMetadata(stored)
+      }
+    } catch (e) {
+      console.error("Failed to load metadata:", e)
+    }
+  }
+
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || chatLoading) return
+
+    const context = chatContext || selectedText
+    if (!context.trim()) {
+      setOutput("⚠️ Please select text from the PDF first as context for Q&A")
+      return
+    }
+
+    if (!hasKey) {
+      setOutput("⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first.")
+      return
+    }
+
+    const userMessage: ChatMessage = { role: "user", content: chatInput.trim() }
+    const newMessages = [...chatMessages, userMessage]
+    setChatMessages(newMessages)
+    setChatInput("")
+    setChatLoading(true)
+
+    if (!chatContext) setChatContext(context)
+
+    try {
+      const reply = await chatWithContext(newMessages, context)
+      const assistantMessage: ChatMessage = { role: "assistant", content: reply }
+      const updatedMessages = [...newMessages, assistantMessage]
+      setChatMessages(updatedMessages)
+
+      await saveChatSession(currentUrl, currentTitle, updatedMessages, context)
+    } catch (e: any) {
+      const errorMessage: ChatMessage = {
+        role: "assistant",
+        content: `❌ Error: ${e?.message ?? String(e)}`
+      }
+      setChatMessages([...newMessages, errorMessage])
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatMessages])
+
   useEffect(() => {
     void fetchSelection()
     void loadNotes()
     void loadHighlights()
+    void loadChatSession()
+    void loadMetadata()
+    // Load preferences
+    getLanguage().then((l) => {
+      setLang(l)
+      setCurrentLanguage(l)
+    })
+    getTheme().then((t) => {
+      setThemeState(t)
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -186,16 +304,83 @@ export default function Sidepanel() {
     hasApiKey().then(setHasKey)
   }, [])
 
-  // Reload notes when switching to comment tab
+  // Reload data when switching tabs
   useEffect(() => {
     if (activeTab === "comment") {
       void loadNotes()
     } else if (activeTab === "highlight") {
       void loadHighlights()
+    } else if (activeTab === "qa") {
+      void loadChatSession()
     }
   }, [activeTab])
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      const isTyping = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
+      if (isTyping) return
+
+      // Number keys for tab switching
+      const tabMap: Record<string, TabKey> = {
+        "1": "summary",
+        "2": "translation",
+        "3": "highlight",
+        "4": "comment",
+        "5": "qa"
+      }
+      if (tabMap[e.key]) {
+        e.preventDefault()
+        setActiveTab(tabMap[e.key])
+        return
+      }
+
+      // Alt shortcuts
+      if (e.altKey) {
+        const altMap: Record<string, TabKey> = {
+          s: "summary",
+          t: "translation",
+          h: "highlight",
+          c: "comment",
+          q: "qa"
+        }
+        if (altMap[e.key]) {
+          e.preventDefault()
+          setActiveTab(altMap[e.key])
+          return
+        }
+        if (e.key === "r") {
+          e.preventDefault()
+          void fetchSelection()
+          return
+        }
+        if (e.key === "e") {
+          e.preventDefault()
+          const md = generateMarkdown(metadata, notes, highlights, chatMessages)
+          const title = (currentTitle || "paper").replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40)
+          const date = new Date().toISOString().slice(0, 10)
+          downloadMarkdown(md, `impulse-${title}-${date}.md`)
+        }
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [metadata, notes, highlights, chatMessages, currentTitle])
+
   const canUseSelection = useMemo(() => selectedText.trim().length > 0, [selectedText])
+
+  // Dark mode color scheme
+  const colors = {
+    bg: isDark ? "#1a1a2e" : "#f9fafb",
+    cardBg: isDark ? "#2d2d44" : "#fff",
+    text: isDark ? "#e5e5e5" : "#374151",
+    textSecondary: isDark ? "#a0a0b8" : "#6b7280",
+    border: isDark ? "#3d3d5c" : "#e5e7eb",
+    inputBg: isDark ? "#2d2d44" : "#fff",
+    sectionBg: isDark ? "#252540" : "#f9fafb",
+    headingText: isDark ? "#f0f0f0" : "#111827"
+  }
 
   return (
     <div
@@ -206,7 +391,8 @@ export default function Sidepanel() {
         flexDirection: "column",
         fontFamily:
           'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial',
-        background: "#f9fafb"
+        background: colors.bg,
+        color: colors.text
       }}>
       {/* CSS 动画定义 */}
       <style>{`
@@ -255,46 +441,111 @@ export default function Sidepanel() {
               AI-Powered PDF Assistant
             </div>
           </div>
-          <button
-            onClick={() => void fetchSelection()}
-            disabled={loadingSelection}
-            className="btn-hover"
-            style={{
-              padding: "8px 14px",
-              fontSize: 12,
-              fontWeight: 600,
-              background: loadingSelection ? "rgba(255, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.25)",
-              color: "#fff",
-              border: "1px solid rgba(255, 255, 255, 0.3)",
-              borderRadius: 8,
-              cursor: loadingSelection ? "not-allowed" : "pointer",
-              backdropFilter: "blur(10px)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6
-            }}>
-            {loadingSelection ? (
-              <>
-                <Spinner /> Loading...
-              </>
-            ) : (
-              "🔄 Refresh"
-            )}
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() => {
+                const md = generateMarkdown(metadata, notes, highlights, chatMessages)
+                const title = (currentTitle || "paper").replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40)
+                const date = new Date().toISOString().slice(0, 10)
+                downloadMarkdown(md, `impulse-${title}-${date}.md`)
+              }}
+              className="btn-hover"
+              title="Export to Markdown"
+              style={{
+                padding: "8px 10px",
+                fontSize: 14,
+                background: "rgba(255, 255, 255, 0.25)",
+                color: "#fff",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: 8,
+                cursor: "pointer",
+                backdropFilter: "blur(10px)"
+              }}>
+              📥
+            </button>
+            <button
+              onClick={() => {
+                const newLang = lang === "en" ? "zh" : "en"
+                setLang(newLang as Language)
+                setCurrentLanguage(newLang as Language)
+                void storeLanguage(newLang as Language)
+              }}
+              className="btn-hover"
+              title="Toggle Language"
+              style={{
+                padding: "8px 10px",
+                fontSize: 11,
+                fontWeight: 700,
+                background: "rgba(255, 255, 255, 0.25)",
+                color: "#fff",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: 8,
+                cursor: "pointer",
+                backdropFilter: "blur(10px)"
+              }}>
+              {lang === "en" ? "中" : "EN"}
+            </button>
+            <button
+              onClick={() => {
+                const newTheme = isDark ? "light" : "dark"
+                setThemeState(newTheme)
+                void storeTheme(newTheme)
+              }}
+              className="btn-hover"
+              title="Toggle Theme"
+              style={{
+                padding: "8px 10px",
+                fontSize: 14,
+                background: "rgba(255, 255, 255, 0.25)",
+                color: "#fff",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: 8,
+                cursor: "pointer",
+                backdropFilter: "blur(10px)"
+              }}>
+              {isDark ? "☀️" : "🌙"}
+            </button>
+            <button
+              onClick={() => void fetchSelection()}
+              disabled={loadingSelection}
+              className="btn-hover"
+              style={{
+                padding: "8px 14px",
+                fontSize: 12,
+                fontWeight: 600,
+                background: loadingSelection ? "rgba(255, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.25)",
+                color: "#fff",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: 8,
+                cursor: loadingSelection ? "not-allowed" : "pointer",
+                backdropFilter: "blur(10px)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6
+              }}>
+              {loadingSelection ? (
+                <>
+                  <Spinner /> Loading...
+                </>
+              ) : (
+                "🔄 Refresh"
+              )}
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-          {tabList.map((t) => {
-            const isActive = activeTab === t.key
+        <div style={{ display: "flex", gap: 4, marginTop: 12 }}>
+          {tabKeys.map((tab) => {
+            const isActive = activeTab === tab.key
             return (
               <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
                 className="tab-btn"
                 style={{
                   flex: 1,
-                  padding: "10px 8px",
-                  fontSize: 11,
+                  padding: "8px 4px",
+                  fontSize: 10,
                   fontWeight: 600,
                   borderRadius: 8,
                   border: "none",
@@ -306,57 +557,162 @@ export default function Sidepanel() {
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
-                  gap: 4
+                  gap: 3
                 }}>
-                <div style={{ fontSize: 16 }}>{t.icon}</div>
-                <div>{t.label}</div>
+                <div style={{ fontSize: 14 }}>{tab.icon}</div>
+                <div>{t(tab.labelKey)}</div>
               </button>
             )
           })}
         </div>
+
+        {/* 错误提示 */}
+        {error && (
+          <div
+            style={{
+              margin: "12px 12px 0",
+              padding: "12px",
+              background: "#fee2e2",
+              border: "1px solid #fca5a5",
+              borderRadius: 8,
+              color: "#991b1b",
+              fontSize: 12,
+              lineHeight: "18px",
+              animation: "fadeIn 0.3s ease",
+              display: "flex",
+              alignItems: "start",
+              gap: 8
+            }}>
+            <div style={{ fontSize: 16 }}>⚠️</div>
+            <div style={{ flex: 1 }}>{error}</div>
+          </div>
+        )}
       </div>
 
-      {/* 错误提示 */}
-      {error && (
-        <div
-          style={{
-            margin: "12px 12px 0",
-            padding: "12px",
-            background: "#fee2e2",
-            border: "1px solid #fca5a5",
-            borderRadius: 8,
-            color: "#991b1b",
-            fontSize: 12,
-            lineHeight: "18px",
-            animation: "fadeIn 0.3s ease",
-            display: "flex",
-            alignItems: "start",
-            gap: 8
-          }}>
-          <div style={{ fontSize: 16 }}>⚠️</div>
-          <div style={{ flex: 1 }}>{error}</div>
-        </div>
-      )}
+      {/* Metadata Card */}
+      <div style={{ padding: "0 12px", marginTop: 8 }}>
+        {metadata ? (
+          <div
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              background: "#fff",
+              overflow: "hidden",
+              marginBottom: 4
+            }}>
+            <button
+              onClick={() => setMetadataExpanded(!metadataExpanded)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#374151"
+              }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
+                📄 {metadata.title || "Paper Metadata"}
+              </span>
+              <span style={{ fontSize: 10, color: "#6b7280", marginLeft: 8 }}>
+                {metadataExpanded ? "▲" : "▼"}
+              </span>
+            </button>
+            {metadataExpanded && (
+              <div style={{ padding: "0 12px 10px", fontSize: 12, color: "#6b7280", lineHeight: "20px" }}>
+                {metadata.authors.length > 0 && (
+                  <div><strong>Authors:</strong> {metadata.authors.join(", ")}</div>
+                )}
+                {metadata.year && <div><strong>Year:</strong> {metadata.year}</div>}
+                {metadata.journal && <div><strong>Journal:</strong> {metadata.journal}</div>}
+                {metadata.doi && <div><strong>DOI:</strong> {metadata.doi}</div>}
+                <button
+                  onClick={() => {
+                    const citation = `${metadata.authors.join(", ")} (${metadata.year}). ${metadata.title}. ${metadata.journal}.${metadata.doi ? ` DOI: ${metadata.doi}` : ""}`
+                    navigator.clipboard.writeText(citation)
+                    setOutput("✅ Citation copied!")
+                    setTimeout(() => setOutput(""), 2000)
+                  }}
+                  style={{
+                    marginTop: 6,
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    background: "#eff6ff",
+                    color: "#3b82f6",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontWeight: 600
+                  }}>
+                  Copy Citation
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={async () => {
+              if (!selectedText.trim()) {
+                setError("Please select paper header text first, then refresh")
+                return
+              }
+              if (!hasKey) {
+                setError("Please configure API Key first")
+                return
+              }
+              setExtractingMetadata(true)
+              try {
+                const result = await extractMetadata(selectedText)
+                setMetadata(result)
+                await saveMetadata(currentUrl, result)
+                setMetadataExpanded(true)
+              } catch (e: any) {
+                setError(`Metadata extraction failed: ${e?.message ?? String(e)}`)
+              } finally {
+                setExtractingMetadata(false)
+              }
+            }}
+            disabled={extractingMetadata}
+            style={{
+              width: "100%",
+              padding: "6px 12px",
+              fontSize: 11,
+              background: "#f9fafb",
+              color: "#6b7280",
+              border: "1px dashed #d1d5db",
+              borderRadius: 8,
+              cursor: extractingMetadata ? "not-allowed" : "pointer",
+              fontWeight: 600,
+              marginBottom: 4
+            }}>
+            {extractingMetadata ? "Extracting..." : "📄 Extract Paper Metadata"}
+          </button>
+        )}
       </div>
 
       {/* 内容区 */}
-      <div style={{ padding: 16, overflow: “auto”, flex: 1 }}>
+      <div style={{ padding: 16, overflow: "auto", flex: 1 }}>
         <div
           style={{
-            color: “#111827”,
+            color: colors.headingText,
             fontWeight: 700,
             marginBottom: 12,
             fontSize: 14,
-            display: “flex”,
-            alignItems: “center”,
+            display: "flex",
+            alignItems: "center",
             gap: 8
           }}>
-          <span style={{ fontSize: 20 }}>{tabList.find((t) => t.key === activeTab)?.icon}</span>
+          <span style={{ fontSize: 20 }}>{tabKeys.find((tab) => tab.key === activeTab)?.icon}</span>
           <span>
-            {activeTab === “summary” && “AI Summary”}
-            {activeTab === “translation” && “AI Translation”}
-            {activeTab === “highlight” && “Smart Highlight”}
-            {activeTab === “comment” && “Quick Notes”}
+            {activeTab === "summary" && t("summary.title")}
+            {activeTab === "translation" && t("translate.title")}
+            {activeTab === "highlight" && t("highlight.title")}
+            {activeTab === "comment" && t("comment.title")}
+            {activeTab === "qa" && t("qa.title")}
           </span>
         </div>
 
@@ -364,41 +720,41 @@ export default function Sidepanel() {
         <div style={{ marginBottom: 16 }}>
           <div
             style={{
-              color: “#6b7280”,
+              color: colors.textSecondary,
               fontSize: 11,
               marginBottom: 8,
               fontWeight: 600,
-              textTransform: “uppercase”,
-              letterSpacing: “0.5px”
+              textTransform: "uppercase",
+              letterSpacing: "0.5px"
             }}>
-            📄 Selected Text
+            📄 {t("common.selectedText")}
           </div>
           <textarea
             readOnly
             value={selectedText}
-            placeholder=”Select text from the PDF page, then click 'Refresh' button above.”
+            placeholder={t("common.selectTextHint")}
             style={{
-              width: “100%”,
+              width: "100%",
               minHeight: 100,
               fontSize: 12,
-              lineHeight: “18px”,
-              resize: “vertical”,
-              boxSizing: “border-box”,
+              lineHeight: "18px",
+              resize: "vertical",
+              boxSizing: "border-box",
               padding: 12,
-              border: “2px solid #e5e7eb”,
+              border: `2px solid ${colors.border}`,
               borderRadius: 10,
-              background: “#fff”,
-              color: “#374151”,
-              fontFamily: “inherit”,
-              transition: “border-color 0.2s ease”,
-              outline: “none”
+              background: colors.inputBg,
+              color: colors.text,
+              fontFamily: "inherit",
+              transition: "border-color 0.2s ease",
+              outline: "none"
             }}
-            onFocus={(e) => (e.target.style.borderColor = “#3b82f6”)}
-            onBlur={(e) => (e.target.style.borderColor = “#e5e7eb”)}
+            onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+            onBlur={(e) => (e.target.style.borderColor = colors.border)}
           />
           {selectedText && (
-            <div style={{ marginTop: 6, fontSize: 11, color: “#6b7280” }}>
-              {selectedText.length} characters selected
+            <div style={{ marginTop: 6, fontSize: 11, color: colors.textSecondary }}>
+              {selectedText.length} {t("common.charsSelected")}
             </div>
           )}
         </div>
@@ -458,14 +814,14 @@ export default function Sidepanel() {
             <div style={{ marginTop: 16 }}>
               <div
                 style={{
-                  color: "#6b7280",
+                  color: colors.textSecondary,
                   fontSize: 11,
                   marginBottom: 8,
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: "0.5px"
                 }}>
-                💡 Output
+                💡 {t("common.output")}
               </div>
               <div
                 style={{
@@ -473,16 +829,16 @@ export default function Sidepanel() {
                   fontSize: 13,
                   lineHeight: "22px",
                   padding: 16,
-                  border: "2px solid #e5e7eb",
+                  border: `2px solid ${colors.border}`,
                   borderRadius: 10,
                   minHeight: 120,
-                  background: "#fff",
-                  color: "#374151",
+                  background: colors.cardBg,
+                  color: colors.text,
                   boxShadow: output ? "0 2px 8px rgba(0, 0, 0, 0.05)" : "none"
                 }}>
                 {output || (
-                  <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
-                    Summary will appear here...
+                  <span style={{ color: colors.textSecondary, fontStyle: "italic" }}>
+                    {t("summary.placeholder")}
                   </span>
                 )}
               </div>
@@ -543,14 +899,14 @@ export default function Sidepanel() {
             <div style={{ marginTop: 16 }}>
               <div
                 style={{
-                  color: "#6b7280",
+                  color: colors.textSecondary,
                   fontSize: 11,
                   marginBottom: 8,
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: "0.5px"
                 }}>
-                💡 Output
+                💡 {t("common.output")}
               </div>
               <div
                 style={{
@@ -558,16 +914,16 @@ export default function Sidepanel() {
                   fontSize: 13,
                   lineHeight: "22px",
                   padding: 16,
-                  border: "2px solid #e5e7eb",
+                  border: `2px solid ${colors.border}`,
                   borderRadius: 10,
                   minHeight: 120,
-                  background: "#fff",
-                  color: "#374151",
+                  background: colors.cardBg,
+                  color: colors.text,
                   boxShadow: output ? "0 2px 8px rgba(0, 0, 0, 0.05)" : "none"
                 }}>
                 {output || (
-                  <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
-                    Translation will appear here...
+                  <span style={{ color: colors.textSecondary, fontStyle: "italic" }}>
+                    {t("translate.placeholder")}
                   </span>
                 )}
               </div>
@@ -755,7 +1111,7 @@ export default function Sidepanel() {
                 <div
                   style={{
                     padding: 20,
-                    border: "2px dashed #e5e7eb",
+                    border: `2px dashed ${colors.border}`,
                     borderRadius: 10,
                     textAlign: "center",
                     color: "#9ca3af",
@@ -886,9 +1242,9 @@ export default function Sidepanel() {
                 resize: "vertical",
                 boxSizing: "border-box",
                 padding: 12,
-                border: "2px solid #e5e7eb",
+                border: `2px solid ${colors.border}`,
                 borderRadius: 10,
-                background: "#fff",
+                background: colors.cardBg,
                 color: "#374151",
                 fontFamily: "inherit",
                 transition: "border-color 0.2s ease",
@@ -1001,9 +1357,9 @@ export default function Sidepanel() {
                   style={{
                     padding: "12px 16px",
                     borderRadius: 10,
-                    background: "#fff",
+                    background: colors.cardBg,
                     color: "#6b7280",
-                    border: "2px solid #e5e7eb",
+                    border: `2px solid ${colors.border}`,
                     cursor: savingNote ? "not-allowed" : "pointer",
                     fontWeight: 600,
                     fontSize: 13,
@@ -1019,9 +1375,9 @@ export default function Sidepanel() {
                   style={{
                     padding: "12px 16px",
                     borderRadius: 10,
-                    background: "#fff",
+                    background: colors.cardBg,
                     color: "#6b7280",
-                    border: "2px solid #e5e7eb",
+                    border: `2px solid ${colors.border}`,
                     cursor: commentDraft.trim() ? "pointer" : "not-allowed",
                     fontWeight: 600,
                     fontSize: 13,
@@ -1106,7 +1462,7 @@ export default function Sidepanel() {
                 <div
                   style={{
                     padding: 20,
-                    border: "2px dashed #e5e7eb",
+                    border: `2px dashed ${colors.border}`,
                     borderRadius: 10,
                     textAlign: "center",
                     color: "#9ca3af",
@@ -1125,9 +1481,9 @@ export default function Sidepanel() {
                       key={note.id}
                       style={{
                         padding: 12,
-                        border: "2px solid #e5e7eb",
+                        border: `2px solid ${colors.border}`,
                         borderRadius: 10,
-                        background: "#fff",
+                        background: colors.cardBg,
                         transition: "all 0.2s ease"
                       }}
                       onMouseEnter={(e) => {
@@ -1223,6 +1579,212 @@ export default function Sidepanel() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === "qa" && (
+          <div style={{ animation: "fadeIn 0.4s ease", display: "flex", flexDirection: "column", height: "100%" }}>
+            {/* Context indicator */}
+            <div
+              style={{
+                padding: 10,
+                background: chatContext ? "#eff6ff" : "#fef3c7",
+                border: `1px solid ${chatContext ? "#bfdbfe" : "#fcd34d"}`,
+                borderRadius: 8,
+                marginBottom: 12,
+                fontSize: 12,
+                color: chatContext ? "#1e40af" : "#92400e",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}>
+              <span>
+                {chatContext
+                  ? `📄 Context: ${chatContext.slice(0, 80)}${chatContext.length > 80 ? "..." : ""}`
+                  : "⚠️ Select text from PDF and refresh to set context"}
+              </span>
+              {chatContext && (
+                <button
+                  onClick={() => {
+                    if (selectedText.trim()) {
+                      setChatContext(selectedText)
+                      setOutput("✅ Context updated")
+                      setTimeout(() => setOutput(""), 2000)
+                    }
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#3b82f6",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: 4,
+                    whiteSpace: "nowrap"
+                  }}>
+                  Update
+                </button>
+              )}
+            </div>
+
+            {/* Chat messages */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                marginBottom: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                minHeight: 200,
+                maxHeight: 400,
+                padding: 4
+              }}>
+              {chatMessages.length === 0 ? (
+                <div
+                  style={{
+                    padding: 20,
+                    border: `2px dashed ${colors.border}`,
+                    borderRadius: 10,
+                    textAlign: "center",
+                    color: "#9ca3af",
+                    fontSize: 13
+                  }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🤖</div>
+                  <div>Ask questions about the paper</div>
+                  <div style={{ fontSize: 11, marginTop: 4 }}>
+                    Select text, refresh, then start chatting!
+                  </div>
+                </div>
+              ) : (
+                chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      justifyContent: msg.role === "user" ? "flex-end" : "flex-start"
+                    }}>
+                    <div
+                      style={{
+                        maxWidth: "85%",
+                        padding: "10px 14px",
+                        borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                        background:
+                          msg.role === "user"
+                            ? "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"
+                            : colors.sectionBg,
+                        color: msg.role === "user" ? "#fff" : "#374151",
+                        fontSize: 13,
+                        lineHeight: "20px",
+                        whiteSpace: "pre-wrap",
+                        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)"
+                      }}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ))
+              )}
+              {chatLoading && (
+                <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "14px 14px 14px 4px",
+                      background: colors.sectionBg,
+                      color: "#6b7280",
+                      fontSize: 13,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8
+                    }}>
+                    <div
+                      style={{
+                        display: "inline-block",
+                        width: 14,
+                        height: 14,
+                        border: "2px solid #d1d5db",
+                        borderTop: "2px solid #3b82f6",
+                        borderRadius: "50%",
+                        animation: "spin 0.8s linear infinite"
+                      }}
+                    />
+                    Thinking...
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat input */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    void handleSendChat()
+                  }
+                }}
+                placeholder="Ask a question about the paper..."
+                style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  border: `2px solid ${colors.border}`,
+                  borderRadius: 10,
+                  outline: "none",
+                  fontFamily: "inherit",
+                  transition: "border-color 0.2s ease"
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+                onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+              />
+              <button
+                onClick={() => void handleSendChat()}
+                disabled={!chatInput.trim() || chatLoading}
+                className="btn-hover"
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  background:
+                    chatInput.trim() && !chatLoading
+                      ? "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"
+                      : "#cbd5e1",
+                  color: "#fff",
+                  border: "none",
+                  cursor: chatInput.trim() && !chatLoading ? "pointer" : "not-allowed",
+                  fontWeight: 600,
+                  fontSize: 13
+                }}>
+                {chatLoading ? <Spinner /> : "Send"}
+              </button>
+            </div>
+
+            {/* Clear chat button */}
+            {chatMessages.length > 0 && (
+              <button
+                onClick={async () => {
+                  if (confirm("Clear chat history for this page?")) {
+                    setChatMessages([])
+                    setChatContext("")
+                    await deleteChatSession(currentUrl)
+                  }
+                }}
+                style={{
+                  marginTop: 10,
+                  background: "none",
+                  border: "none",
+                  color: "#ef4444",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: 4,
+                  textAlign: "center"
+                }}>
+                Clear Chat History
+              </button>
+            )}
           </div>
         )}
       </div>

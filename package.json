@@ -10,6 +10,8 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "@parcel/transformer-js": "^2.9.3",
+    "@swc/core-linux-x64-gnu": "^1.15.13",
     "openai": "^6.33.0",
     "plasmo": "0.90.5",
     "react": "18.2.0",

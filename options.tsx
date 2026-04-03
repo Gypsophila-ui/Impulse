@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from "react"
 
-import { clearConfig, getLLMConfig, saveLLMConfig } from "~utils/storage"
+import type { Language, Theme } from "~types"
+import {
+  clearConfig,
+  getLanguage,
+  getLLMConfig,
+  getTheme,
+  saveLLMConfig,
+  setLanguage,
+  setTheme
+} from "~utils/storage"
 
 // Spinner component
 const Spinner = () => (
@@ -23,6 +32,8 @@ export default function Options() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [showKey, setShowKey] = useState(false)
+  const [lang, setLang] = useState<Language>("en")
+  const [theme, setThemeLocal] = useState<Theme>("light")
 
   useEffect(() => {
     // Load existing config
@@ -32,6 +43,8 @@ export default function Options() {
         if (config.model) setModel(config.model)
       }
     })
+    getLanguage().then(setLang)
+    getTheme().then(setThemeLocal)
   }, [])
 
   const handleSave = async () => {
@@ -259,6 +272,78 @@ export default function Options() {
             <p style={{ color: "#6b7280", fontSize: 12, marginTop: 6, lineHeight: "18px" }}>
               Choose based on your needs. GPT-4o Mini offers the best balance.
             </p>
+          </div>
+
+          {/* Language & Theme */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+            <div style={{ flex: 1 }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: 8,
+                  fontSize: 13,
+                  color: "#374151",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }}>
+                🌍 Language
+              </label>
+              <select
+                value={lang}
+                onChange={(e) => {
+                  const newLang = e.target.value as Language
+                  setLang(newLang)
+                  void setLanguage(newLang)
+                }}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  fontSize: 14,
+                  border: "2px solid #e5e7eb",
+                  borderRadius: 10,
+                  background: "#fff",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}>
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: 8,
+                  fontSize: 13,
+                  color: "#374151",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px"
+                }}>
+                🎨 Theme
+              </label>
+              <select
+                value={theme}
+                onChange={(e) => {
+                  const newTheme = e.target.value as Theme
+                  setThemeLocal(newTheme)
+                  void setTheme(newTheme)
+                }}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  fontSize: 14,
+                  border: "2px solid #e5e7eb",
+                  borderRadius: 10,
+                  background: "#fff",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </div>
           </div>
 
           {/* Buttons */}
