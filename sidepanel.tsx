@@ -79,7 +79,6 @@ const formatDate = (timestamp: number): string => {
 
 export default function Sidepanel() {
   const [activeTab, setActiveTab] = useState<TabKey>("summary")
-  const [loadingSelection, setLoadingSelection] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [selectedText, setSelectedText] = useState("")
@@ -123,27 +122,17 @@ export default function Sidepanel() {
   const isDark = theme === "dark"
 
   const fetchSelection = async () => {
-    setLoadingSelection(true)
-    setError(null)
-
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      if (!tab?.id) {
-        throw new Error("未找到当前活动标签页")
-      }
+      if (!tab?.id) return
 
       const text = await getSelectionInTab(tab.id)
 
       if (text) {
         setSelectedText((prev) => (isSameText(prev, text) ? prev : text))
-        setOutput("")
-      } else {
-        setError("未检测到选中文本。请先在 PDF 中选中文本并按 Ctrl+C 复制，然后再点刷新。也可以直接在下方文本框粘贴。")
       }
-    } catch (e: any) {
-      setError(e?.message ?? "读取选中文本失败")
-    } finally {
-      setLoadingSelection(false)
+    } catch {
+      // Silently ignore — auto-refresh should not flash errors
     }
   }
 
@@ -298,6 +287,12 @@ export default function Sidepanel() {
     getTheme().then((t) => {
       setThemeState(t)
     })
+
+    // Auto-refresh selection every 2 seconds
+    const interval = setInterval(() => {
+      void fetchSelection()
+    }, 2000)
+    return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -349,11 +344,6 @@ export default function Sidepanel() {
         if (altMap[e.key]) {
           e.preventDefault()
           setActiveTab(altMap[e.key])
-          return
-        }
-        if (e.key === "r") {
-          e.preventDefault()
-          void fetchSelection()
           return
         }
         if (e.key === "e") {
@@ -505,32 +495,6 @@ export default function Sidepanel() {
                 backdropFilter: "blur(10px)"
               }}>
               {isDark ? "☀️" : "🌙"}
-            </button>
-            <button
-              onClick={() => void fetchSelection()}
-              disabled={loadingSelection}
-              className="btn-hover"
-              style={{
-                padding: "8px 14px",
-                fontSize: 12,
-                fontWeight: 600,
-                background: loadingSelection ? "rgba(255, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.25)",
-                color: "#fff",
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                borderRadius: 8,
-                cursor: loadingSelection ? "not-allowed" : "pointer",
-                backdropFilter: "blur(10px)",
-                display: "flex",
-                alignItems: "center",
-                gap: 6
-              }}>
-              {loadingSelection ? (
-                <>
-                  <Spinner /> Loading...
-                </>
-              ) : (
-                "🔄 Refresh"
-              )}
             </button>
           </div>
         </div>
@@ -733,7 +697,7 @@ export default function Sidepanel() {
           <textarea
             value={selectedText}
             onChange={(e) => setSelectedText(e.target.value)}
-            placeholder="1. Select text in PDF → Ctrl+C → click Refresh\n2. Or paste text here directly (Ctrl+V)"
+            placeholder="Select text in the PDF page — it will appear here automatically.\nOr paste text directly (Ctrl+V)."
             style={{
               width: "100%",
               minHeight: 100,
