@@ -92,7 +92,7 @@
 - [x] **Q&A 问答功能** - 多轮对话，基于论文上下文的智能问答 (2026-04-03)
 - [x] **论文元数据提取** - AI 自动提取标题、作者、年份、期刊、DOI (2026-04-03)
 - [x] **导出功能** - 导出笔记/高亮/问答记录为 Markdown 文件 (2026-04-03)
-- [x] **快捷键支持** - 数字键 1-5 切换 Tab，Alt+S/T/H/C/Q 切换，Alt+R 刷新，Alt+E 导出 (2026-04-03)
+- [x] **快捷键支持** - 数字键 1-5 切换 Tab，Alt+S/T/H/C/Q 切换，Alt+E 导出 (2026-04-03)
 - [x] **深色模式** - Light/Dark 主题切换，全组件适配 (2026-04-03)
 
 ### 📚 测试文档 ✅
@@ -227,39 +227,29 @@
 
 ---
 
-### Phase 3：高级功能（长期规划）
+### Phase 3：高级功能 - ✅ 已完成
 
 **目标**：智能化阅读体验，打造专业级学术助手
 
-#### 优先级 P0（核心价值）
+| 序号 | 任务 | 状态 | 完成日期 |
+|------|------|------|----------|
+| 3.1 | **问答功能** - 多轮对话，论文上下文 | ✅ 完成 | 2026-04-03 |
+| 3.2 | **论文元数据提取** - 标题、作者、年份、DOI | ✅ 完成 | 2026-04-03 |
+| 3.3 | **导出功能** - Markdown 导出 | ✅ 完成 | 2026-04-03 |
+| 3.4 | **快捷键支持** - 数字键/Alt 快捷键 | ✅ 完成 | 2026-04-03 |
+| 3.5 | **深色模式** - Light/Dark 主题 | ✅ 完成 | 2026-04-03 |
+| 3.6 | **多语言界面** - 英文/中文切换 | ✅ 完成 | 2026-04-03 |
+| 3.7 | **自动文本同步** - 2秒轮询，移除手动刷新 | ✅ 完成 | 2026-04-03 |
+
+### Phase 4：生态扩展（未来规划）
 
 | 序号 | 任务 | 描述 | 预估工作量 | 价值 |
 |------|------|------|------------|------|
-| 3.1 | **问答功能** | 针对论文内容提问，AI 回答 | 3-5 天 | ⭐⭐⭐⭐⭐ |
-| 3.2 | **论文元数据提取** | 自动提取标题、作者、年份、期刊 | 1-2 天 | ⭐⭐⭐⭐ |
-| 3.3 | **导出功能** | 导出笔记和高亮为 Markdown/PDF | 1-2 天 | ⭐⭐⭐⭐ |
-
-#### 优先级 P1（体验提升）
-
-| 序号 | 任务 | 描述 | 预估工作量 | 价值 |
-|------|------|------|------------|------|
-| 3.4 | **论文结构解析** | 识别章节、摘要、参考文献 | 2-3 天 | ⭐⭐⭐ |
-| 3.5 | **快捷键支持** | 键盘快捷键（S=Summary, T=Translate等）| 0.5 天 | ⭐⭐⭐ |
-| 3.6 | **多语言界面** | 英文/中文界面切换 | 0.5 天 | ⭐⭐⭐ |
-| 3.7 | **深色模式** | Dark mode 主题 | 1 天 | ⭐⭐⭐ |
-
-#### 优先级 P2（生态扩展）
-
-| 序号 | 任务 | 描述 | 预估工作量 | 价值 |
-|------|------|------|------------|------|
-| 3.8 | **多平台支持** | Edge、Firefox 兼容 | 2-3 天 | ⭐⭐ |
-| 3.9 | **账号同步** | 云端保存笔记和高亮 | 3-5 天 | ⭐⭐ |
-| 3.10 | **团队协作** | 分享笔记和高亮 | 5-7 天 | ⭐ |
-
-**下一步建议**：
-1. **Phase 3.1 问答功能** - 最高价值，用户最想要的功能
-2. **Phase 3.2 元数据提取** - 增强专业感
-3. **Phase 3.3 导出功能** - 实用性强
+| 4.1 | **论文结构解析** | 识别章节、摘要、参考文献 | 2-3 天 | ⭐⭐⭐ |
+| 4.2 | **多平台支持** | Edge、Firefox 兼容 | 2-3 天 | ⭐⭐ |
+| 4.3 | **账号同步** | 云端保存笔记和高亮 | 3-5 天 | ⭐⭐ |
+| 4.4 | **团队协作** | 分享笔记和高亮 | 5-7 天 | ⭐ |
+| 4.5 | **Chrome Web Store 发布** | 素材、描述、隐私政策 | 1-2 天 | ⭐⭐⭐⭐ |
 
 **交付物**：完整的 AI 学术论文阅读助手
 
@@ -271,33 +261,34 @@
 
 ```
 Impulse/
-├── assets/                  # 静态资源（图标等）
 ├── contents/               # Content scripts（注入到页面）
-│   ├── selection.ts        # 选中文本获取（跨 frame）
-│   └── highlight.ts        # 页面高亮功能（NEW）
+│   ├── selection.ts        # 选中文本消息监听
+│   └── highlight.ts        # 页面高亮 DOM 操作
 ├── docs/                   # 文档
 │   ├── DEVELOPMENT_PLAN.md # 开发计划（本文件）
 │   ├── UI_IMPROVEMENTS.md  # UI 改进文档
 │   └── TESTING_GUIDE.md    # 测试指南
+├── types/                  # 共享类型定义
+│   └── index.ts            # ChatMessage, PaperMetadata, Language, Theme
 ├── utils/                  # 工具函数
-│   ├── get-selection.ts    # 选中文本获取工具
-│   ├── storage.ts          # Storage 封装（Notes + Highlights + Config）
-│   └── llm-client.ts       # LLM 客户端（OpenAI）
-├── background.ts           # Service Worker（后台逻辑）
-├── sidepanel.tsx           # 侧边栏主界面（1000+ 行）
-├── options.tsx             # 配置页面（API Key）
-├── CLAUDE.md               # 项目指南（for Claude Code）
-├── TEST_CHECKLIST.md       # 快速测试清单
+│   ├── get-selection.ts    # 跨 frame 选中文本获取
+│   ├── storage.ts          # chrome.storage 封装（Notes/Highlights/Chat/Config）
+│   ├── llm-client.ts       # OpenAI API 客户端
+│   ├── i18n.ts             # 国际化（英文/中文）
+│   └── export.ts           # Markdown 导出工具
+├── background.ts           # Service Worker（PDF 检测）
+├── sidepanel.tsx           # 侧边栏主界面（5 个 Tab）
+├── options.tsx             # API Key 配置页面
+├── CLAUDE.md               # 项目指南
 ├── package.json            # 项目配置 + 权限
 └── tsconfig.json           # TypeScript 配置
 ```
 
-**代码统计**（截至 2026-04-02）:
-- 总行数：约 3500+ 行
-- TypeScript：~90%
+**代码统计**（截至 2026-04-03）:
 - React 组件：2 个（sidepanel, options）
 - Content Scripts：2 个（selection, highlight）
-- Utils：3 个（storage, llm-client, get-selection）
+- Utils：5 个（storage, llm-client, get-selection, i18n, export）
+- 类型定义：1 个（types/index.ts）
 
 ### 4.2 关键技术点
 

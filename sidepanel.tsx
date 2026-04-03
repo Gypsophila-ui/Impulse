@@ -83,7 +83,6 @@ export default function Sidepanel() {
 
   const [selectedText, setSelectedText] = useState("")
 
-  // 下面的 result 先做占位：你后续接 LLM 时只需要把对应 tab 的逻辑补上即可。
   const [output, setOutput] = useState<string>("")
 
   const [commentDraft, setCommentDraft] = useState("")
