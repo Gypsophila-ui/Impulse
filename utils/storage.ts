@@ -8,6 +8,7 @@ export interface LLMConfig {
   provider: "openai"
   apiKey: string
   model?: string
+  baseURL?: string // 兼容 Qwen / DeepSeek / 其他 OpenAI 兼容 API
 }
 
 export interface Note {

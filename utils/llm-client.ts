@@ -13,6 +13,7 @@ async function getClient(): Promise<OpenAI> {
     }
     openaiClient = new OpenAI({
       apiKey: config.apiKey,
+      baseURL: config.baseURL || undefined, // 留空则默认 OpenAI
       dangerouslyAllowBrowser: true // Chrome extension context
     })
   }

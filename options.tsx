@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react"
 
 import type { Language, Theme } from "~types"
+import { resetClient } from "~utils/llm-client"
 import {
   clearConfig,
   getLanguage,
@@ -29,18 +30,46 @@ const Spinner = () => (
 export default function Options() {
   const [apiKey, setApiKey] = useState("")
   const [model, setModel] = useState("gpt-4o-mini")
+  const [baseURL, setBaseURL] = useState("")
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [showKey, setShowKey] = useState(false)
   const [lang, setLang] = useState<Language>("en")
   const [theme, setThemeLocal] = useState<Theme>("light")
 
+  // Provider presets
+  const presets: Array<{ label: string; baseURL: string; models: string[] }> = [
+    {
+      label: "OpenAI",
+      baseURL: "",
+      models: ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
+    },
+    {
+      label: "DeepSeek",
+      baseURL: "https://api.deepseek.com/v1",
+      models: ["deepseek-chat", "deepseek-reasoner"]
+    },
+    {
+      label: "Qwen (Alibaba)",
+      baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      models: ["qwen-plus", "qwen-turbo", "qwen-max"]
+    },
+    {
+      label: "Custom",
+      baseURL: "custom",
+      models: []
+    }
+  ]
+
+  const activePreset = presets.find((p) => p.baseURL === baseURL)
+    || (baseURL ? presets.find((p) => p.label === "Custom") : presets[0])
+
   useEffect(() => {
-    // Load existing config
     getLLMConfig().then((config) => {
       if (config) {
         setApiKey(config.apiKey)
         if (config.model) setModel(config.model)
+        if (config.baseURL) setBaseURL(config.baseURL)
       }
     })
     getLanguage().then(setLang)
@@ -53,21 +82,18 @@ export default function Options() {
       return
     }
 
-    // Basic validation
-    if (!apiKey.startsWith("sk-")) {
-      setMessage("error:Invalid API Key format. It should start with 'sk-'")
-      return
-    }
-
     setSaving(true)
     setMessage("")
 
     try {
+      const effectiveBaseURL = baseURL === "custom" ? "" : baseURL
       await saveLLMConfig({
         provider: "openai",
         apiKey: apiKey.trim(),
-        model
+        model,
+        baseURL: effectiveBaseURL || undefined
       })
+      resetClient() // 重新创建客户端以使用新配置
       setMessage("success:Configuration saved successfully! 🎉")
       setTimeout(() => setMessage(""), 3000)
     } catch (e: any) {
@@ -82,6 +108,7 @@ export default function Options() {
       try {
         await clearConfig()
         setApiKey("")
+        setBaseURL("")
         setModel("gpt-4o-mini")
         setMessage("success:Configuration cleared")
         setTimeout(() => setMessage(""), 3000)
@@ -238,6 +265,80 @@ export default function Options() {
             </p>
           </div>
 
+          {/* Provider Selection */}
+          <div style={{ marginBottom: 24 }}>
+            <label
+              style={{
+                display: "block",
+                fontWeight: 600,
+                marginBottom: 8,
+                fontSize: 13,
+                color: "#374151",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px"
+              }}>
+              🔌 API Provider
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {presets.map((preset) => {
+                const isActive =
+                  preset.label === "Custom"
+                    ? activePreset?.label === "Custom"
+                    : baseURL === preset.baseURL
+                return (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      if (preset.label === "Custom") {
+                        setBaseURL("custom")
+                      } else {
+                        setBaseURL(preset.baseURL)
+                        if (preset.models.length > 0) setModel(preset.models[0])
+                      }
+                    }}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      border: isActive ? "2px solid #3b82f6" : "2px solid #e5e7eb",
+                      borderRadius: 8,
+                      background: isActive ? "#eff6ff" : "#fff",
+                      color: isActive ? "#3b82f6" : "#374151",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease"
+                    }}>
+                    {preset.label}
+                  </button>
+                )
+              })}
+            </div>
+            {activePreset?.label === "Custom" && (
+              <input
+                type="text"
+                value={baseURL === "custom" ? "" : baseURL}
+                onChange={(e) => setBaseURL(e.target.value || "custom")}
+                placeholder="https://your-api-endpoint.com/v1"
+                style={{
+                  width: "100%",
+                  marginTop: 10,
+                  padding: 12,
+                  fontSize: 14,
+                  border: "2px solid #e5e7eb",
+                  borderRadius: 10,
+                  boxSizing: "border-box",
+                  fontFamily: "monospace",
+                  transition: "all 0.2s ease"
+                }}
+              />
+            )}
+            <p style={{ color: "#6b7280", fontSize: 12, marginTop: 6, lineHeight: "18px" }}>
+              {activePreset?.label === "OpenAI" && "Default OpenAI API. Get key from platform.openai.com"}
+              {activePreset?.label === "DeepSeek" && "DeepSeek API. Get key from platform.deepseek.com"}
+              {activePreset?.label === "Qwen (Alibaba)" && "Alibaba Qwen via DashScope. Get key from dashscope.console.aliyun.com"}
+              {activePreset?.label === "Custom" && "Enter any OpenAI-compatible API endpoint."}
+            </p>
+          </div>
+
           {/* Model Selection */}
           <div style={{ marginBottom: 24 }}>
             <label
@@ -252,25 +353,46 @@ export default function Options() {
               }}>
               🤖 AI Model
             </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              style={{
-                width: "100%",
-                padding: 12,
-                fontSize: 14,
-                border: "2px solid #e5e7eb",
-                borderRadius: 10,
-                background: "#fff",
-                cursor: "pointer",
-                transition: "all 0.2s ease"
-              }}>
-              <option value="gpt-4o-mini">GPT-4o Mini (Recommended - Fast & Affordable)</option>
-              <option value="gpt-4o">GPT-4o (Most Capable)</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Budget Option)</option>
-            </select>
+            {activePreset && activePreset.models.length > 0 ? (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  fontSize: 14,
+                  border: "2px solid #e5e7eb",
+                  borderRadius: 10,
+                  background: "#fff",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}>
+                {activePreset.models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="model-name"
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  fontSize: 14,
+                  border: "2px solid #e5e7eb",
+                  borderRadius: 10,
+                  boxSizing: "border-box",
+                  fontFamily: "monospace",
+                  transition: "all 0.2s ease"
+                }}
+              />
+            )}
             <p style={{ color: "#6b7280", fontSize: 12, marginTop: 6, lineHeight: "18px" }}>
-              Choose based on your needs. GPT-4o Mini offers the best balance.
+              {activePreset?.label === "Custom"
+                ? "Enter the model name supported by your API endpoint."
+                : `Select a model from ${activePreset?.label || "the provider"}.`}
             </p>
           </div>
 
