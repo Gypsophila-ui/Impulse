@@ -5,12 +5,12 @@
   "description": "A basic Plasmo extension.",
   "author": "Gypsophila <a44949522@outlook.com>",
   "scripts": {
-    "dev": "plasmo dev",
-    "build": "plasmo build",
+    "dev": "set PARCEL_WORKERS=0&& plasmo dev",
+    "build": "set PARCEL_WORKERS=0&& plasmo build",
     "package": "plasmo package"
   },
   "dependencies": {
-    "@parcel/transformer-js": "^2.9.3",
+    "@plasmohq/parcel-optimizer-es": "^0.4.2",
     "openai": "^6.33.0",
     "plasmo": "0.90.5",
     "react": "18.2.0",
@@ -24,6 +24,9 @@
     "@types/react-dom": "18.2.18",
     "prettier": "3.2.4",
     "typescript": "5.3.3"
+  },
+  "overrides": {
+    "@swc/core": "1.15.24"
   },
   "manifest": {
     "action": {
