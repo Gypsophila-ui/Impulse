@@ -1,4 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
+import {
+  AlertTriangle,
+  Bot,
+  FileText,
+  Globe,
+  Lightbulb,
+  MessageSquare,
+  Moon,
+  Pencil,
+  Save,
+  Settings,
+  Sparkles,
+  Sun,
+  Trash2,
+  X
+} from "lucide-react"
 
 import type { ChatMessage, Language, PaperMetadata, Theme } from "~types"
 import { downloadMarkdown, generateMarkdown } from "~utils/export"
@@ -7,10 +23,12 @@ import { getCurrentLanguage, setCurrentLanguage, t } from "~utils/i18n"
 import {
   chatWithContext,
   extractMetadata,
+  resetClient,
   summarize,
   translate
 } from "~utils/llm-client"
 import {
+  clearConfig,
   deleteChatSession,
   deleteHighlight,
   deleteHighlightsByUrl,
@@ -18,12 +36,14 @@ import {
   getChatSessionByUrl,
   getHighlightsByUrl,
   getLanguage,
+  getLLMConfig,
   getMetadataByUrl,
   getNotesByUrl,
   getTheme,
   hasApiKey,
   saveChatSession,
   saveHighlights,
+  saveLLMConfig,
   saveMetadata,
   saveNote,
   setLanguage as storeLanguage,
@@ -35,12 +55,12 @@ import {
 
 type TabKey = "summary" | "translation" | "highlight" | "comment" | "qa"
 
-const tabKeys: Array<{ key: TabKey; labelKey: string; icon: string }> = [
-  { key: "summary", labelKey: "tab.summary", icon: "📝" },
-  { key: "translation", labelKey: "tab.translate", icon: "🌐" },
-  { key: "highlight", labelKey: "tab.highlight", icon: "✨" },
-  { key: "comment", labelKey: "tab.comment", icon: "💬" },
-  { key: "qa", labelKey: "tab.qa", icon: "🤖" }
+const tabKeys: Array<{ key: TabKey; labelKey: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }> = [
+  { key: "summary", labelKey: "tab.summary", icon: FileText },
+  { key: "translation", labelKey: "tab.translate", icon: Globe },
+  { key: "highlight", labelKey: "tab.highlight", icon: Sparkles },
+  { key: "comment", labelKey: "tab.comment", icon: MessageSquare },
+  { key: "qa", labelKey: "tab.qa", icon: Bot }
 ]
 
 // 加载动画组件
@@ -83,7 +103,18 @@ export default function Sidepanel() {
 
   const [selectedText, setSelectedText] = useState("")
 
-  const [output, setOutput] = useState<string>("")
+  const [output, setOutput] = useState<React.ReactNode>("")
+  const [outputType, setOutputType] = useState<"success" | "warning" | "error" | "">("")
+
+  const showMessage = (message: React.ReactNode, type: "success" | "warning" | "error") => {
+    setOutput(message)
+    setOutputType(type)
+  }
+
+  const clearMessage = () => {
+    setOutput("")
+    setOutputType("")
+  }
 
   const [commentDraft, setCommentDraft] = useState("")
 
@@ -119,6 +150,24 @@ export default function Sidepanel() {
   const [lang, setLang] = useState<Language>("en")
   const [theme, setThemeState] = useState<Theme>("light")
   const isDark = theme === "dark"
+
+  // Config modal state
+  const configPresets = [
+    { label: "OpenAI", baseURL: "", models: ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"] },
+    { label: "DeepSeek", baseURL: "https://api.deepseek.com/v1", models: ["deepseek-chat", "deepseek-reasoner"] },
+    { label: "Qwen", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", models: ["qwen-plus", "qwen-turbo", "qwen-max"] },
+    { label: "Custom", baseURL: "custom", models: [] }
+  ]
+  const [showConfig, setShowConfig] = useState(false)
+  const [configApiKey, setConfigApiKey] = useState("")
+  const [configBaseURL, setConfigBaseURL] = useState("")
+  const [configModel, setConfigModel] = useState("gpt-4o-mini")
+  const [configSaving, setConfigSaving] = useState(false)
+  const [configMessage, setConfigMessage] = useState("")
+  const [showConfigKey, setShowConfigKey] = useState(false)
+  const activeConfigPreset = configPresets.find((p) =>
+    p.label === "Custom" ? false : p.baseURL === configBaseURL
+  ) || (configBaseURL ? configPresets.find((p) => p.label === "Custom") : configPresets[0])
 
   const fetchSelection = async () => {
     try {
@@ -176,13 +225,13 @@ export default function Sidepanel() {
       })
 
       if (response?.success) {
-        setOutput(`✅ Applied ${response.count} highlights on the page!`)
-        setTimeout(() => setOutput(""), 3000)
+        showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Applied {response.count} highlights on the page!</>, "success")
+        setTimeout(() => clearMessage(), 3000)
       } else {
-        setOutput(`⚠️ ${response?.error || "Failed to apply highlights"}`)
+        showMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> {response?.error || "Failed to apply highlights"}</>, "warning")
       }
     } catch (e: any) {
-      setOutput(`❌ Failed to apply highlights: ${e?.message ?? String(e)}`)
+      showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to apply highlights: {e?.message ?? String(e)}</>, "error")
     } finally {
       setApplyingHighlights(false)
     }
@@ -232,12 +281,12 @@ export default function Sidepanel() {
 
     const context = chatContext || selectedText
     if (!context.trim()) {
-      setOutput("⚠️ Please select text from the PDF first as context for Q&A")
+      showMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> Please select text from the PDF first as context for Q&A</>, "warning")
       return
     }
 
     if (!hasKey) {
-      setOutput("⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first.")
+      showMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> API Key Not Configured{"\n\n"}Please configure your OpenAI API Key first.</>, "warning")
       return
     }
 
@@ -259,7 +308,7 @@ export default function Sidepanel() {
     } catch (e: any) {
       const errorMessage: ChatMessage = {
         role: "assistant",
-        content: `❌ Error: ${e?.message ?? String(e)}`
+        content: `Error: ${e?.message ?? String(e)}`
       }
       setChatMessages([...newMessages, errorMessage])
     } finally {
@@ -380,7 +429,7 @@ export default function Sidepanel() {
         display: "flex",
         flexDirection: "column",
         fontFamily:
-          'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial',
+          'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"',
         background: colors.bg,
         color: colors.text
       }}>
@@ -432,6 +481,35 @@ export default function Sidepanel() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() => {
+                getLLMConfig().then((config) => {
+                  if (config) {
+                    setConfigApiKey(config.apiKey)
+                    if (config.model) setConfigModel(config.model)
+                    if (config.baseURL) setConfigBaseURL(config.baseURL)
+                    else setConfigBaseURL("")
+                  }
+                })
+                setConfigMessage("")
+                setShowConfig(true)
+              }}
+              className="btn-hover"
+              title="Configure API"
+              style={{
+                padding: "8px 10px",
+                fontSize: 14,
+                background: "rgba(255, 255, 255, 0.25)",
+                color: "#fff",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: 8,
+                cursor: "pointer",
+                backdropFilter: "blur(10px)",
+                display: "flex",
+                alignItems: "center"
+              }}>
+              <Settings size={16} />
+            </button>
             <button
               onClick={() => {
                 const md = generateMarkdown(metadata, notes, highlights, chatMessages)
@@ -493,7 +571,7 @@ export default function Sidepanel() {
                 cursor: "pointer",
                 backdropFilter: "blur(10px)"
               }}>
-              {isDark ? "☀️" : "🌙"}
+              {isDark ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#a5b4fc" />}
             </button>
           </div>
         </div>
@@ -523,7 +601,7 @@ export default function Sidepanel() {
                   alignItems: "center",
                   gap: 3
                 }}>
-                <div style={{ fontSize: 14 }}>{tab.icon}</div>
+                <div><tab.icon size={16} /></div>
                 <div>{t(tab.labelKey)}</div>
               </button>
             )
@@ -547,7 +625,7 @@ export default function Sidepanel() {
               alignItems: "start",
               gap: 8
             }}>
-            <div style={{ fontSize: 16 }}>⚠️</div>
+            <AlertTriangle size={16} color="#991b1b" />
             <div style={{ flex: 1 }}>{error}</div>
           </div>
         )}
@@ -579,8 +657,8 @@ export default function Sidepanel() {
                 fontWeight: 600,
                 color: "#374151"
               }}>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
-                📄 {metadata.title || "Paper Metadata"}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left", display: "flex", alignItems: "center", gap: 6 }}>
+                <FileText size={14} /> {metadata.title || "Paper Metadata"}
               </span>
               <span style={{ fontSize: 10, color: "#6b7280", marginLeft: 8 }}>
                 {metadataExpanded ? "▲" : "▼"}
@@ -598,8 +676,8 @@ export default function Sidepanel() {
                   onClick={() => {
                     const citation = `${metadata.authors.join(", ")} (${metadata.year}). ${metadata.title}. ${metadata.journal}.${metadata.doi ? ` DOI: ${metadata.doi}` : ""}`
                     navigator.clipboard.writeText(citation)
-                    setOutput("✅ Citation copied!")
-                    setTimeout(() => setOutput(""), 2000)
+                    showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Citation copied!</>, "success")
+                    setTimeout(() => clearMessage(), 2000)
                   }}
                   style={{
                     marginTop: 6,
@@ -653,7 +731,7 @@ export default function Sidepanel() {
               fontWeight: 600,
               marginBottom: 4
             }}>
-            {extractingMetadata ? "Extracting..." : "📄 Extract Paper Metadata"}
+            {extractingMetadata ? "Extracting..." : (<><FileText size={14} style={{ marginRight: 4, color: "#3b82f6" }} /> Extract Paper Metadata</>)}
           </button>
         )}
       </div>
@@ -670,7 +748,10 @@ export default function Sidepanel() {
             alignItems: "center",
             gap: 8
           }}>
-          <span style={{ fontSize: 20 }}>{tabKeys.find((tab) => tab.key === activeTab)?.icon}</span>
+          {(() => {
+            const IconComponent = tabKeys.find((tab) => tab.key === activeTab)?.icon
+            return IconComponent ? <IconComponent size={20} /> : null
+          })()}
           <span>
             {activeTab === "summary" && t("summary.title")}
             {activeTab === "translation" && t("translate.title")}
@@ -691,12 +772,12 @@ export default function Sidepanel() {
               textTransform: "uppercase",
               letterSpacing: "0.5px"
             }}>
-            📄 {t("common.selectedText")}
+            <FileText size={12} style={{ marginRight: 4, color: "#6b7280" }} /> {t("common.selectedText")}
           </div>
           <textarea
             value={selectedText}
             onChange={(e) => setSelectedText(e.target.value)}
-            placeholder="Select text in the PDF page — it will appear here automatically.\nOr paste text directly (Ctrl+V)."
+            placeholder="Select text in the PDF page — it will appear here automatically.Or paste text directly (Ctrl+V)."
             style={{
               width: "100%",
               minHeight: 100,
@@ -730,18 +811,18 @@ export default function Sidepanel() {
               disabled={!canUseSelection || loading}
               onClick={async () => {
                 if (!hasKey) {
-                  setOutput(
-                    "⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first:\n1. Right-click extension icon\n2. Select 'Options'\n3. Enter your API Key"
+                  showMessage(
+                    <><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> API Key Not Configured{"\n\n"}Please configure your OpenAI API Key first:{"\n"}1. Right-click extension icon{"\n"}2. Select 'Options'{"\n"}3. Enter your API Key</>, "warning"
                   )
                   return
                 }
                 setLoading(true)
-                setOutput("✨ Generating summary...")
+                showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Generating summary...</>, "success")
                 try {
                   const result = await summarize(selectedText)
-                  setOutput(result)
+                  showMessage(result, "success")
                 } catch (e: any) {
-                  setOutput(`❌ Failed to generate summary:\n\n${e?.message ?? String(e)}`)
+                  showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to generate summary:{"\n\n"}{e?.message ?? String(e)}</>, "error")
                 } finally {
                   setLoading(false)
                 }
@@ -772,7 +853,7 @@ export default function Sidepanel() {
                   <Spinner /> Generating...
                 </>
               ) : (
-                <>📝 Generate Summary</>
+                <><Pencil size={14} /> Generate Summary</>
               )}
             </button>
             <div style={{ marginTop: 16 }}>
@@ -785,7 +866,7 @@ export default function Sidepanel() {
                   textTransform: "uppercase",
                   letterSpacing: "0.5px"
                 }}>
-                💡 {t("common.output")}
+                <Lightbulb size={12} style={{ marginRight: 4, color: "#6b7280" }} /> {t("common.output")}
               </div>
               <div
                 style={{
@@ -816,18 +897,18 @@ export default function Sidepanel() {
               disabled={!canUseSelection || loading}
               onClick={async () => {
                 if (!hasKey) {
-                  setOutput(
-                    "⚠️ API Key Not Configured\n\nPlease configure your OpenAI API Key first:\n1. Right-click extension icon\n2. Select 'Options'\n3. Enter your API Key"
+                  showMessage(
+                    <><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> API Key Not Configured{"\n\n"}Please configure your OpenAI API Key first:{"\n"}1. Right-click extension icon{"\n"}2. Select 'Options'{"\n"}3. Enter your API Key</>, "warning"
                   )
                   return
                 }
                 setLoading(true)
-                setOutput("🌐 Translating to Chinese...")
+                showMessage(<><Globe size={14} style={{ marginRight: 4, color: "#10b981" }} /> Translating to Chinese...</>, "success")
                 try {
                   const result = await translate(selectedText)
-                  setOutput(result)
+                  showMessage(result, "success")
                 } catch (e: any) {
-                  setOutput(`❌ Translation failed:\n\n${e?.message ?? String(e)}`)
+                  showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Translation failed:{"\n\n"}{e?.message ?? String(e)}</>, "error")
                 } finally {
                   setLoading(false)
                 }
@@ -857,7 +938,7 @@ export default function Sidepanel() {
                   <Spinner /> Translating...
                 </>
               ) : (
-                <>🌐 Translate to Chinese</>
+                <><Globe size={14} /> Translate to Chinese</>
               )}
             </button>
             <div style={{ marginTop: 16 }}>
@@ -870,7 +951,7 @@ export default function Sidepanel() {
                   textTransform: "uppercase",
                   letterSpacing: "0.5px"
                 }}>
-                💡 {t("common.output")}
+                <Lightbulb size={12} style={{ marginRight: 4, color: "#6b7280" }} /> {t("common.output")}
               </div>
               <div
                 style={{
@@ -903,7 +984,7 @@ export default function Sidepanel() {
               className="btn-hover"
               onClick={async () => {
                 if (!canUseSelection) {
-                  setOutput("⚠️ Please select text first")
+                  showMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> Please select text first</>, "warning")
                   return
                 }
 
@@ -924,9 +1005,9 @@ export default function Sidepanel() {
                   // Reload highlights list
                   await loadHighlights()
 
-                  setOutput("✅ Highlighted successfully!")
+                  showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Highlighted successfully!</>, "success")
                 } catch (e: any) {
-                  setOutput(`❌ Failed to highlight:\n\n${e?.message ?? String(e)}`)
+                  showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to highlight:{"\n\n"}{e?.message ?? String(e)}</>, "error")
                 } finally {
                   setGeneratingHighlights(false)
                 }
@@ -959,7 +1040,7 @@ export default function Sidepanel() {
                   <Spinner /> Highlighting...
                 </>
               ) : (
-                <>✨ {t("highlight.title")}</>
+                <><Sparkles size={14} /> {t("highlight.title")}</>
               )}
             </button>
 
@@ -970,14 +1051,14 @@ export default function Sidepanel() {
                   marginTop: 12,
                   padding: 12,
                   borderRadius: 8,
-                  background: output.startsWith("✅")
+                  background: outputType === "success"
                     ? "#d1fae5"
-                    : output.startsWith("⚠️")
+                    : outputType === "warning"
                       ? "#fef3c7"
                       : "#fee2e2",
-                  color: output.startsWith("✅")
+                  color: outputType === "success"
                     ? "#065f46"
-                    : output.startsWith("⚠️")
+                    : outputType === "warning"
                       ? "#92400e"
                       : "#991b1b",
                   fontSize: 12,
@@ -1003,14 +1084,14 @@ export default function Sidepanel() {
                   alignItems: "center",
                   justifyContent: "space-between"
                 }}>
-                <span>✨ Active Highlights ({highlights.length})</span>
+                <span><Sparkles size={12} style={{ marginRight: 4, color: "#f59e0b" }} /> Active Highlights ({highlights.length})</span>
                 {highlights.length > 0 && (
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       onClick={async () => {
                         await clearHighlightsFromPage()
-                        setOutput("✅ Cleared highlights from page")
-                        setTimeout(() => setOutput(""), 2000)
+                        showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Cleared highlights from page</>, "success")
+                        setTimeout(() => clearMessage(), 2000)
                       }}
                       disabled={applyingHighlights}
                       style={{
@@ -1031,10 +1112,10 @@ export default function Sidepanel() {
                             await deleteHighlightsByUrl(currentUrl)
                             await clearHighlightsFromPage()
                             await loadHighlights()
-                            setOutput("✅ All highlights deleted")
-                            setTimeout(() => setOutput(""), 2000)
+                            showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> All highlights deleted</>, "success")
+                            setTimeout(() => clearMessage(), 2000)
                           } catch (e: any) {
-                            setOutput(`❌ Failed to delete: ${e?.message ?? String(e)}`)
+                            showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to delete: {e?.message ?? String(e)}</>, "error")
                           }
                         }
                       }}
@@ -1063,7 +1144,7 @@ export default function Sidepanel() {
                     color: "#9ca3af",
                     fontSize: 13
                   }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>✨</div>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}><Sparkles size={32} color="#f59e0b" /></div>
                   <div>No highlights yet</div>
                   <div style={{ fontSize: 11, marginTop: 4 }}>
                     Select text and click to highlight!
@@ -1135,10 +1216,10 @@ export default function Sidepanel() {
                                 } else {
                                   await clearHighlightsFromPage()
                                 }
-                                setOutput("✅ Highlight deleted")
-                                setTimeout(() => setOutput(""), 2000)
+                                showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Highlight deleted</>, "success")
+                                setTimeout(() => clearMessage(), 2000)
                               } catch (e: any) {
-                                setOutput(`❌ Failed to delete: ${e?.message ?? String(e)}`)
+                                showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to delete: {e?.message ?? String(e)}</>, "error")
                               }
                             }
                           }}
@@ -1151,7 +1232,7 @@ export default function Sidepanel() {
                             color: "#ef4444"
                           }}
                           title="Delete">
-                          🗑️
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -1174,7 +1255,7 @@ export default function Sidepanel() {
                 textTransform: "uppercase",
                 letterSpacing: "0.5px"
               }}>
-              ✏️ {editingNoteId ? "Edit Note" : "New Note"}
+              <Pencil size={12} style={{ marginRight: 4, color: "#6b7280" }} /> {editingNoteId ? "Edit Note" : "New Note"}
             </div>
             <textarea
               value={commentDraft}
@@ -1216,21 +1297,21 @@ export default function Sidepanel() {
                       setCommentDraft("")
                       setEditingNoteId(null)
                       await loadNotes()
-                      setOutput("✅ Note updated successfully!")
-                      setTimeout(() => setOutput(""), 2000)
+                      showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Note updated successfully!</>, "success")
+                      setTimeout(() => clearMessage(), 2000)
                     } catch (e: any) {
-                      setOutput(`❌ Failed to update note: ${e?.message ?? String(e)}`)
+                      showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to update note: {e?.message ?? String(e)}</>, "error")
                     } finally {
                       setSavingNote(false)
                     }
                   } else {
                     // Save new note
                     if (!canUseSelection) {
-                      setOutput("⚠️ Please select text first")
+                      showMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> Please select text first</>, "warning")
                       return
                     }
                     if (!commentDraft.trim()) {
-                      setOutput("⚠️ Please write a note")
+                      showMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> Please write a note</>, "warning")
                       return
                     }
                     try {
@@ -1243,10 +1324,10 @@ export default function Sidepanel() {
                       )
                       setCommentDraft("")
                       await loadNotes()
-                      setOutput("✅ Note saved successfully!")
-                      setTimeout(() => setOutput(""), 2000)
+                      showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Note saved successfully!</>, "success")
+                      setTimeout(() => clearMessage(), 2000)
                     } catch (e: any) {
-                      setOutput(`❌ Failed to save note: ${e?.message ?? String(e)}`)
+                      showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to save note: {e?.message ?? String(e)}</>, "error")
                     } finally {
                       setSavingNote(false)
                     }
@@ -1288,9 +1369,9 @@ export default function Sidepanel() {
                     <Spinner /> Saving...
                   </>
                 ) : editingNoteId ? (
-                  <>💾 Update Note</>
+                  <><Save size={14} /> Update Note</>
                 ) : (
-                  <>💾 Save Note</>
+                  <><Save size={14} /> Save Note</>
                 )}
               </button>
               {editingNoteId && (
@@ -1311,7 +1392,7 @@ export default function Sidepanel() {
                     fontSize: 13,
                     transition: "all 0.2s ease"
                   }}>
-                  ✖️ Cancel
+                  <X size={14} /> Cancel
                 </button>
               )}
               {!editingNoteId && (
@@ -1339,7 +1420,7 @@ export default function Sidepanel() {
                     e.currentTarget.style.borderColor = "#e5e7eb"
                     e.currentTarget.style.color = "#6b7280"
                   }}>
-                  🗑️
+                  <Trash2 size={14} />
                 </button>
               )}
             </div>
@@ -1351,8 +1432,8 @@ export default function Sidepanel() {
                   marginTop: 12,
                   padding: 10,
                   borderRadius: 8,
-                  background: output.startsWith("✅") ? "#d1fae5" : "#fee2e2",
-                  color: output.startsWith("✅") ? "#065f46" : "#991b1b",
+                  background: outputType === "success" ? "#d1fae5" : "#fee2e2",
+                  color: outputType === "success" ? "#065f46" : "#991b1b",
                   fontSize: 12,
                   animation: "fadeIn 0.3s ease"
                 }}>
@@ -1374,7 +1455,7 @@ export default function Sidepanel() {
                   alignItems: "center",
                   justifyContent: "space-between"
                 }}>
-                <span>📚 Saved Notes ({notes.length})</span>
+                <span><FileText size={12} style={{ marginRight: 4, color: "#6b7280" }} /> Saved Notes ({notes.length})</span>
                 {notes.length > 0 && (
                   <button
                     onClick={() => {
@@ -1382,11 +1463,11 @@ export default function Sidepanel() {
                         Promise.all(notes.map((note) => deleteNote(note.id)))
                           .then(() => loadNotes())
                           .then(() => {
-                            setOutput("✅ All notes deleted")
-                            setTimeout(() => setOutput(""), 2000)
+                            showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> All notes deleted</>, "success")
+                            setTimeout(() => clearMessage(), 2000)
                           })
                           .catch((e: any) => {
-                            setOutput(`❌ Failed to delete notes: ${e?.message ?? String(e)}`)
+                            showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to delete notes: {e?.message ?? String(e)}</>, "error")
                           })
                       }
                     }}
@@ -1414,7 +1495,7 @@ export default function Sidepanel() {
                     color: "#9ca3af",
                     fontSize: 13
                   }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>📝</div>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}><MessageSquare size={32} color="#3b82f6" /></div>
                   <div>No notes yet</div>
                   <div style={{ fontSize: 11, marginTop: 4 }}>
                     Select text and create your first note!
@@ -1466,7 +1547,7 @@ export default function Sidepanel() {
                               color: "#3b82f6"
                             }}
                             title="Edit">
-                            ✏️
+                            <Pencil size={14} />
                           </button>
                           <button
                             onClick={async () => {
@@ -1474,10 +1555,10 @@ export default function Sidepanel() {
                                 try {
                                   await deleteNote(note.id)
                                   await loadNotes()
-                                  setOutput("✅ Note deleted")
-                                  setTimeout(() => setOutput(""), 2000)
+                                  showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Note deleted</>, "success")
+                                  setTimeout(() => clearMessage(), 2000)
                                 } catch (e: any) {
-                                  setOutput(`❌ Failed to delete: ${e?.message ?? String(e)}`)
+                                  showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to delete: {e?.message ?? String(e)}</>, "error")
                                 }
                               }
                             }}
@@ -1490,7 +1571,7 @@ export default function Sidepanel() {
                               color: "#ef4444"
                             }}
                             title="Delete">
-                            🗑️
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
@@ -1544,18 +1625,18 @@ export default function Sidepanel() {
                 alignItems: "center",
                 justifyContent: "space-between"
               }}>
-              <span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {chatContext
-                  ? `📄 Context: ${chatContext.slice(0, 80)}${chatContext.length > 80 ? "..." : ""}`
-                  : "⚠️ Select text from PDF and refresh to set context"}
+                  ? <><FileText size={12} /> Context: {chatContext.slice(0, 80)}{chatContext.length > 80 ? "..." : ""}</>
+                  : <><AlertTriangle size={12} /> Select text from PDF and refresh to set context</>}
               </span>
               {chatContext && (
                 <button
                   onClick={() => {
                     if (selectedText.trim()) {
                       setChatContext(selectedText)
-                      setOutput("✅ Context updated")
-                      setTimeout(() => setOutput(""), 2000)
+                      showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Context updated</>, "success")
+                      setTimeout(() => clearMessage(), 2000)
                     }
                   }}
                   style={{
@@ -1596,7 +1677,7 @@ export default function Sidepanel() {
                     color: "#9ca3af",
                     fontSize: 13
                   }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>🤖</div>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}><Bot size={32} color="#8b5cf6" /></div>
                   <div>Ask questions about the paper</div>
                   <div style={{ fontSize: 11, marginTop: 4 }}>
                     Select text, refresh, then start chatting!
@@ -1734,6 +1815,282 @@ export default function Sidepanel() {
           </div>
         )}
       </div>
+
+      {/* Config Modal */}
+      {showConfig && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowConfig(false) }}>
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 14,
+              width: "100%",
+              maxWidth: 360,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+              overflow: "hidden",
+              animation: "fadeIn 0.2s ease"
+            }}>
+            {/* Modal header */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+                padding: "16px 20px",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 16 }}>
+                <Settings size={18} /> Configure API
+              </div>
+              <button
+                onClick={() => setShowConfig(false)}
+                style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", padding: 4 }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div style={{ padding: 20 }}>
+              {/* API Key */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontWeight: 600, fontSize: 12, color: "#374151", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  API Key *
+                </label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showConfigKey ? "text" : "password"}
+                    value={configApiKey}
+                    onChange={(e) => setConfigApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    style={{
+                      width: "100%",
+                      padding: "10px 36px 10px 10px",
+                      fontSize: 13,
+                      border: "2px solid #e5e7eb",
+                      borderRadius: 8,
+                      boxSizing: "border-box",
+                      fontFamily: "monospace",
+                      outline: "none"
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+                    onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfigKey(!showConfigKey)}
+                    style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }}>
+                    {showConfigKey ? "🙈" : "👁️"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Provider */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontWeight: 600, fontSize: 12, color: "#374151", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Provider
+                </label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {configPresets.map((preset) => {
+                    const isActive = preset.label === "Custom"
+                      ? activeConfigPreset?.label === "Custom"
+                      : configBaseURL === preset.baseURL
+                    return (
+                      <button
+                        key={preset.label}
+                        onClick={() => {
+                          if (preset.label === "Custom") {
+                            setConfigBaseURL("custom")
+                          } else {
+                            setConfigBaseURL(preset.baseURL)
+                            if (preset.models.length > 0) setConfigModel(preset.models[0])
+                          }
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          border: isActive ? "2px solid #3b82f6" : "2px solid #e5e7eb",
+                          borderRadius: 6,
+                          background: isActive ? "#eff6ff" : "#fff",
+                          color: isActive ? "#3b82f6" : "#374151",
+                          cursor: "pointer"
+                        }}>
+                        {preset.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {activeConfigPreset?.label === "Custom" && (
+                  <input
+                    type="text"
+                    value={configBaseURL === "custom" ? "" : configBaseURL}
+                    onChange={(e) => setConfigBaseURL(e.target.value || "custom")}
+                    placeholder="https://your-api-endpoint.com/v1"
+                    style={{
+                      width: "100%",
+                      marginTop: 8,
+                      padding: "10px",
+                      fontSize: 13,
+                      border: "2px solid #e5e7eb",
+                      borderRadius: 8,
+                      boxSizing: "border-box",
+                      fontFamily: "monospace",
+                      outline: "none"
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+                    onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                  />
+                )}
+              </div>
+
+              {/* Model */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontWeight: 600, fontSize: 12, color: "#374151", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Model
+                </label>
+                {activeConfigPreset && activeConfigPreset.models.length > 0 ? (
+                  <select
+                    value={configModel}
+                    onChange={(e) => setConfigModel(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      fontSize: 13,
+                      border: "2px solid #e5e7eb",
+                      borderRadius: 8,
+                      background: "#fff",
+                      cursor: "pointer",
+                      outline: "none"
+                    }}>
+                    {activeConfigPreset.models.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={configModel}
+                    onChange={(e) => setConfigModel(e.target.value)}
+                    placeholder="model-name"
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      fontSize: 13,
+                      border: "2px solid #e5e7eb",
+                      borderRadius: 8,
+                      boxSizing: "border-box",
+                      fontFamily: "monospace",
+                      outline: "none"
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+                    onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                  />
+                )}
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  disabled={configSaving || !configApiKey.trim()}
+                  onClick={async () => {
+                    if (!configApiKey.trim()) {
+                      setConfigMessage("error:Please enter your API Key")
+                      return
+                    }
+                    setConfigSaving(true)
+                    setConfigMessage("")
+                    try {
+                      const effectiveBaseURL = configBaseURL === "custom" ? "" : configBaseURL
+                      await saveLLMConfig({
+                        provider: "openai",
+                        apiKey: configApiKey.trim(),
+                        model: configModel,
+                        baseURL: effectiveBaseURL || undefined
+                      })
+                      resetClient()
+                      setHasKey(true)
+                      setConfigMessage("success:Saved!")
+                      setTimeout(() => {
+                        setConfigMessage("")
+                        setShowConfig(false)
+                      }, 1200)
+                    } catch (e: any) {
+                      setConfigMessage(`error:${e?.message ?? String(e)}`)
+                    } finally {
+                      setConfigSaving(false)
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "10px 16px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: configSaving || !configApiKey.trim() ? "#cbd5e1" : "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    cursor: configSaving || !configApiKey.trim() ? "not-allowed" : "pointer"
+                  }}>
+                  {configSaving ? "Saving..." : "Save"}
+                </button>
+                {configApiKey && (
+                  <button
+                    onClick={async () => {
+                      if (confirm("Clear API configuration?")) {
+                        await clearConfig()
+                        setConfigApiKey("")
+                        setConfigBaseURL("")
+                        setConfigModel("gpt-4o-mini")
+                        setHasKey(false)
+                        setConfigMessage("success:Cleared")
+                        setTimeout(() => setConfigMessage(""), 2000)
+                      }
+                    }}
+                    style={{
+                      padding: "10px 14px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: "#fff",
+                      color: "#ef4444",
+                      border: "2px solid #ef4444",
+                      borderRadius: 8,
+                      cursor: "pointer"
+                    }}>
+                    🗑️
+                  </button>
+                )}
+              </div>
+
+              {/* Message */}
+              {configMessage && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "10px 12px",
+                    fontSize: 12,
+                    borderRadius: 8,
+                    background: configMessage.startsWith("success") ? "#d1fae5" : "#fee2e2",
+                    color: configMessage.startsWith("success") ? "#065f46" : "#991b1b",
+                    animation: "fadeIn 0.3s ease"
+                  }}>
+                  {configMessage.split(":").slice(1).join(":")}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

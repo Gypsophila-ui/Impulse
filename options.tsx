@@ -128,7 +128,7 @@ export default function Options() {
         background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
         padding: "40px 20px",
         fontFamily:
-          'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial'
+          'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"'
       }}>
       <style>{`
         @keyframes spin {
