@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:bundlephobia.com)",
+      "WebFetch(domain:docs.langchain.com)",
+      "Bash(ls /tmp)",
+      "Read(//c/Users/a4494/AppData/Local/Temp/**)",
+      "Bash(npm view:*)",
+      "Read(//tmp/langchain-research/**)",
+      "Bash(npx esbuild:*)",
+      "Bash(gzip -k bundle_core.js)"
+    ]
+  }
+}
