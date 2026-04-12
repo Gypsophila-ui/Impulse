@@ -9,6 +9,48 @@ export interface ChatMessage {
   content: string
 }
 
+// Agent types
+export interface ToolCallMessage {
+  role: "assistant"
+  content: string | null
+  tool_calls: Array<{
+    id: string
+    type: "function"
+    function: {
+      name: string
+      arguments: string
+    }
+  }>
+}
+
+export interface ToolResultMessage {
+  role: "tool"
+  tool_call_id: string
+  content: string
+}
+
+export type AgentMessage = ChatMessage | ToolCallMessage | ToolResultMessage
+
+export interface AgentChatResult {
+  success: boolean
+  message: string
+  toolCallsExecuted: Array<{
+    name: string
+    args: Record<string, unknown>
+    result: {
+      success: boolean
+      message: string
+      data?: unknown
+    }
+  }>
+  fallbackToSimpleChat: boolean
+  newSummary?: string
+}
+
+export interface AgentStatusCallback {
+  (status: string, phase: "thinking" | "tool_call" | "complete"): void
+}
+
 export interface ChatSession {
   id: string
   url: string
@@ -16,6 +58,7 @@ export interface ChatSession {
   messages: ChatMessage[]
   paperContext: string
   timestamp: number
+  summary?: string
 }
 
 // Paper metadata

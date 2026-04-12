@@ -16,11 +16,13 @@ import {
   X
 } from "lucide-react"
 
-import type { ChatMessage, Language, PaperMetadata, Theme } from "~types"
+import type { AgentChatResult, ChatMessage, Language, PaperMetadata, Theme } from "~types"
+import { type ToolExecutionContext } from "~utils/agent-tools"
 import { downloadMarkdown, generateMarkdown } from "~utils/export"
 import { getSelectionInTab } from "~utils/get-selection"
 import { getCurrentLanguage, setCurrentLanguage, t } from "~utils/i18n"
 import {
+  agentChat,
   chatWithContext,
   extractMetadata,
   resetClient,
@@ -141,6 +143,12 @@ export default function Sidepanel() {
   const [chatContext, setChatContext] = useState("")
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // Agent mode state
+  const [agentMode, setAgentMode] = useState(true)
+  const [agentStatus, setAgentStatus] = useState<string | null>(null)
+  const [lastToolCalls, setLastToolCalls] = useState<AgentChatResult["toolCallsExecuted"]>([])
+  const [chatSummary, setChatSummary] = useState<string | undefined>(undefined)
+
   // Metadata state
   const [metadata, setMetadata] = useState<PaperMetadata | null>(null)
   const [metadataExpanded, setMetadataExpanded] = useState(false)
@@ -257,6 +265,7 @@ export default function Sidepanel() {
         if (session) {
           setChatMessages(session.messages)
           setChatContext(session.paperContext)
+          setChatSummary(session.summary)
         }
       }
     } catch (e) {
@@ -295,16 +304,73 @@ export default function Sidepanel() {
     setChatMessages(newMessages)
     setChatInput("")
     setChatLoading(true)
+    setAgentStatus(null)
+    setLastToolCalls([])
 
     if (!chatContext) setChatContext(context)
 
     try {
-      const reply = await chatWithContext(newMessages, context)
-      const assistantMessage: ChatMessage = { role: "assistant", content: reply }
-      const updatedMessages = [...newMessages, assistantMessage]
-      setChatMessages(updatedMessages)
+      if (agentMode) {
+        const toolContext: ToolExecutionContext = {
+          selectedText,
+          currentUrl,
+          currentTitle,
+          currentTabId
+        }
 
-      await saveChatSession(currentUrl, currentTitle, updatedMessages, context)
+        const result = await agentChat(
+          newMessages,
+          context,
+          toolContext,
+          (status, phase) => {
+            setAgentStatus(status)
+          },
+          chatSummary
+        )
+
+        setLastToolCalls(result.toolCallsExecuted)
+
+        if (result.newSummary) {
+          setChatSummary(result.newSummary)
+        }
+
+        const assistantMessage: ChatMessage = {
+          role: "assistant",
+          content: result.message
+        }
+        const updatedMessages = [...newMessages, assistantMessage]
+        setChatMessages(updatedMessages)
+
+        await saveChatSession(currentUrl, currentTitle, updatedMessages, context, result.newSummary || chatSummary)
+
+        if (result.toolCallsExecuted.length > 0) {
+          const hasNoteOperation = result.toolCallsExecuted.some(
+            (tc) => tc.name === "save_note" || tc.name === "get_notes" || tc.name === "search_notes"
+          )
+          const hasHighlightOperation = result.toolCallsExecuted.some(
+            (tc) => tc.name === "apply_highlight" || tc.name === "get_highlights"
+          )
+
+          if (hasNoteOperation) {
+            await loadNotes()
+          }
+          if (hasHighlightOperation) {
+            await loadHighlights()
+          }
+        }
+
+        if (result.fallbackToSimpleChat) {
+          showMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> 模型不支持工具调用，已使用普通对话模式</>, "warning")
+          setTimeout(() => clearMessage(), 3000)
+        }
+      } else {
+        const reply = await chatWithContext(newMessages, context)
+        const assistantMessage: ChatMessage = { role: "assistant", content: reply }
+        const updatedMessages = [...newMessages, assistantMessage]
+        setChatMessages(updatedMessages)
+
+        await saveChatSession(currentUrl, currentTitle, updatedMessages, context, chatSummary)
+      }
     } catch (e: any) {
       const errorMessage: ChatMessage = {
         role: "assistant",
@@ -313,6 +379,7 @@ export default function Sidepanel() {
       setChatMessages([...newMessages, errorMessage])
     } finally {
       setChatLoading(false)
+      setAgentStatus(null)
     }
   }
 
@@ -424,7 +491,7 @@ export default function Sidepanel() {
   return (
     <div
       style={{
-        width: 380,
+        width: "100%",
         height: "100%",
         display: "flex",
         flexDirection: "column",
@@ -1654,6 +1721,38 @@ export default function Sidepanel() {
               )}
             </div>
 
+            {/* Agent mode toggle */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12,
+                padding: "8px 12px",
+                background: agentMode ? "#f0fdf4" : "#f9fafb",
+                border: `1px solid ${agentMode ? "#86efac" : "#e5e7eb"}`,
+                borderRadius: 8
+              }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: agentMode ? "#166534" : "#6b7280" }}>
+                <Bot size={14} />
+                {agentMode ? "Agent 模式 - 可执行工具操作" : "普通对话模式"}
+              </span>
+              <button
+                onClick={() => setAgentMode(!agentMode)}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: "none",
+                  background: agentMode ? "#22c55e" : "#d1d5db",
+                  color: "#fff",
+                  cursor: "pointer"
+                }}>
+                {agentMode ? "ON" : "OFF"}
+              </button>
+            </div>
+
             {/* Chat messages */}
             <div
               style={{
@@ -1735,8 +1834,30 @@ export default function Sidepanel() {
                         animation: "spin 0.8s linear infinite"
                       }}
                     />
-                    Thinking...
+                    {agentStatus || "Thinking..."}
                   </div>
+                </div>
+              )}
+              {lastToolCalls.length > 0 && !chatLoading && (
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    background: "#f0fdf4",
+                    border: "1px solid #86efac",
+                    borderRadius: 8,
+                    fontSize: 11,
+                    color: "#166534"
+                  }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>已执行工具：</div>
+                  {lastToolCalls.map((tc, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                      <span style={{ color: tc.result.success ? "#22c55e" : "#ef4444" }}>
+                        {tc.result.success ? "✓" : "✗"}
+                      </span>
+                      <span style={{ fontWeight: 500 }}>{tc.name}</span>
+                      <span style={{ color: "#6b7280" }}>- {tc.result.message}</span>
+                    </div>
+                  ))}
                 </div>
               )}
               <div ref={chatEndRef} />

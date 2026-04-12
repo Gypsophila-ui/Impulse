@@ -254,7 +254,8 @@ export async function saveChatSession(
   url: string,
   pageTitle: string,
   messages: ChatMessage[],
-  paperContext: string
+  paperContext: string,
+  summary?: string
 ): Promise<ChatSession> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.CHAT_SESSIONS)
   const sessions = (result[STORAGE_KEYS.CHAT_SESSIONS] || []) as ChatSession[]
@@ -264,6 +265,9 @@ export async function saveChatSession(
     sessions[existingIndex].messages = messages
     sessions[existingIndex].paperContext = paperContext
     sessions[existingIndex].timestamp = Date.now()
+    if (summary !== undefined) {
+      sessions[existingIndex].summary = summary
+    }
     await chrome.storage.local.set({ [STORAGE_KEYS.CHAT_SESSIONS]: sessions })
     return sessions[existingIndex]
   }
@@ -274,7 +278,8 @@ export async function saveChatSession(
     pageTitle,
     messages,
     paperContext,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    ...(summary ? { summary } : {})
   }
   sessions.push(newSession)
   await chrome.storage.local.set({ [STORAGE_KEYS.CHAT_SESSIONS]: sessions })
