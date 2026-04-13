@@ -1,6 +1,6 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions"
 
-import type { PaperMetadata } from "~types"
+import type { AskUserQuestionCallback, PaperMetadata } from "~types"
 import {
   getHighlightsByUrl,
   getNotesByUrl,
@@ -21,6 +21,7 @@ export interface ToolExecutionContext {
   currentUrl: string
   currentTitle: string
   currentTabId: number | null
+  askUserQuestion?: AskUserQuestionCallback
 }
 
 export interface ToolResult {
@@ -158,6 +159,50 @@ export const PAPER_TOOLS: ChatCompletionTool[] = [
           }
         },
         required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "ask_user_question",
+      description:
+        "向用户提问并获取回答。当需要用户做出选择、确认操作、提供偏好设置或澄清模糊需求时使用。可以提供预设选项供用户选择，也可以允许用户自定义输入。",
+      parameters: {
+        type: "object",
+        properties: {
+          question: {
+            type: "string",
+            description: "要向用户提出的问题"
+          },
+          options: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                label: {
+                  type: "string",
+                  description: "选项标签"
+                },
+                description: {
+                  type: "string",
+                  description: "选项描述（可选）"
+                }
+              },
+              required: ["label"]
+            },
+            description: "预设选项列表，建议提供2-4个选项"
+          },
+          allow_custom_input: {
+            type: "boolean",
+            description: "是否允许用户自定义输入，默认为false"
+          },
+          placeholder: {
+            type: "string",
+            description: "自定义输入框的占位符文本"
+          }
+        },
+        required: ["question", "options"]
       }
     }
   }
@@ -352,6 +397,43 @@ export async function executeToolCall(
         }
       } catch (e: any) {
         return { success: false, error: e?.message, message: `搜索失败：${e?.message ?? String(e)}` }
+      }
+    }
+
+    case "ask_user_question": {
+      const question = args.question as string
+      const options = args.options as Array<{ label: string; description?: string }>
+      const allowCustomInput = (args.allow_custom_input as boolean) ?? false
+      const placeholder = args.placeholder as string | undefined
+
+      if (!question?.trim()) {
+        return { success: false, error: "问题不能为空", message: "提问失败：问题为空" }
+      }
+      if (!options?.length) {
+        return { success: false, error: "选项不能为空", message: "提问失败：请提供选项" }
+      }
+
+      if (!context.askUserQuestion) {
+        return { success: false, error: "askUserQuestion 回调未配置", message: "提问失败：系统未配置用户交互功能" }
+      }
+
+      try {
+        const result = await context.askUserQuestion({
+          question,
+          options,
+          allowCustomInput,
+          placeholder
+        })
+        return {
+          success: true,
+          data: {
+            answer: result.selected,
+            isCustomInput: result.isCustomInput
+          },
+          message: `用户回答：${result.selected}`
+        }
+      } catch (e: any) {
+        return { success: false, error: e?.message, message: `提问失败：${e?.message ?? String(e)}` }
       }
     }
 

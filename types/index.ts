@@ -51,6 +51,26 @@ export interface AgentStatusCallback {
   (status: string, phase: "thinking" | "tool_call" | "complete"): void
 }
 
+// Ask User Question types
+export interface AskUserQuestionOption {
+  label: string
+  description?: string
+}
+
+export interface AskUserQuestionParams {
+  question: string
+  options: AskUserQuestionOption[]
+  allowCustomInput?: boolean
+  placeholder?: string
+}
+
+export interface AskUserQuestionResult {
+  selected: string
+  isCustomInput?: boolean
+}
+
+export type AskUserQuestionCallback = (params: AskUserQuestionParams) => Promise<AskUserQuestionResult>
+
 export interface ChatSession {
   id: string
   url: string
