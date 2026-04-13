@@ -12,11 +12,13 @@ import {
   Settings,
   Sparkles,
   Sun,
+  Target,
   Trash2,
   X
 } from "lucide-react"
 
-import type { AgentChatResult, ChatMessage, Language, PaperMetadata, Theme } from "~types"
+import type { AgentChatResult, ChatMessage, Language, PaperMetadata, ReadingGoal, Theme } from "~types"
+import { READING_GOAL_CONFIG } from "~types"
 import { type ToolExecutionContext } from "~utils/agent-tools"
 import { downloadMarkdown, generateMarkdown } from "~utils/export"
 import { getSelectionInTab } from "~utils/get-selection"
@@ -148,6 +150,9 @@ export default function Sidepanel() {
   const [agentStatus, setAgentStatus] = useState<string | null>(null)
   const [lastToolCalls, setLastToolCalls] = useState<AgentChatResult["toolCallsExecuted"]>([])
   const [chatSummary, setChatSummary] = useState<string | undefined>(undefined)
+
+  // Reading goal state
+  const [readingGoal, setReadingGoal] = useState<ReadingGoal>("understand_method")
 
   // Metadata state
   const [metadata, setMetadata] = useState<PaperMetadata | null>(null)
@@ -325,7 +330,8 @@ export default function Sidepanel() {
           (status, phase) => {
             setAgentStatus(status)
           },
-          chatSummary
+          chatSummary,
+          readingGoal
         )
 
         setLastToolCalls(result.toolCallsExecuted)
@@ -364,7 +370,7 @@ export default function Sidepanel() {
           setTimeout(() => clearMessage(), 3000)
         }
       } else {
-        const reply = await chatWithContext(newMessages, context)
+        const reply = await chatWithContext(newMessages, context, readingGoal)
         const assistantMessage: ChatMessage = { role: "assistant", content: reply }
         const updatedMessages = [...newMessages, assistantMessage]
         setChatMessages(updatedMessages)
@@ -874,6 +880,45 @@ export default function Sidepanel() {
         {/* 各栏操作 */}
         {activeTab === "summary" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
+            {/* Reading Goal Selector */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{
+                color: colors.textSecondary,
+                fontSize: 11,
+                marginBottom: 6,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.5px"
+              }}>
+                <Target size={12} style={{ marginRight: 4, color: "#6b7280" }} /> {t("readingGoal.title")}
+              </div>
+              <select
+                value={readingGoal}
+                onChange={(e) => setReadingGoal(e.target.value as ReadingGoal)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: `2px solid ${colors.border}`,
+                  background: colors.cardBg,
+                  color: colors.text,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  outline: "none",
+                  fontFamily: "inherit"
+                }}
+              >
+                {(Object.keys(READING_GOAL_CONFIG) as ReadingGoal[]).map((goal) => (
+                  <option key={goal} value={goal}>
+                    {t(READING_GOAL_CONFIG[goal].labelKey)}
+                  </option>
+                ))}
+              </select>
+              <div style={{ marginTop: 4, fontSize: 11, color: colors.textSecondary, fontStyle: "italic" }}>
+                {t(READING_GOAL_CONFIG[readingGoal].descriptionKey)}
+              </div>
+            </div>
+
             <button
               disabled={!canUseSelection || loading}
               onClick={async () => {
@@ -886,7 +931,7 @@ export default function Sidepanel() {
                 setLoading(true)
                 showMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Generating summary...</>, "success")
                 try {
-                  const result = await summarize(selectedText)
+                  const result = await summarize(selectedText, readingGoal)
                   showMessage(result, "success")
                 } catch (e: any) {
                   showMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to generate summary:{"\n\n"}{e?.message ?? String(e)}</>, "error")
@@ -1678,6 +1723,45 @@ export default function Sidepanel() {
 
         {activeTab === "qa" && (
           <div style={{ animation: "fadeIn 0.4s ease", display: "flex", flexDirection: "column", height: "100%" }}>
+            {/* Reading Goal Selector */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{
+                color: colors.textSecondary,
+                fontSize: 11,
+                marginBottom: 6,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.5px"
+              }}>
+                <Target size={12} style={{ marginRight: 4, color: "#6b7280" }} /> {t("readingGoal.title")}
+              </div>
+              <select
+                value={readingGoal}
+                onChange={(e) => setReadingGoal(e.target.value as ReadingGoal)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: `2px solid ${colors.border}`,
+                  background: colors.cardBg,
+                  color: colors.text,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  outline: "none",
+                  fontFamily: "inherit"
+                }}
+              >
+                {(Object.keys(READING_GOAL_CONFIG) as ReadingGoal[]).map((goal) => (
+                  <option key={goal} value={goal}>
+                    {t(READING_GOAL_CONFIG[goal].labelKey)}
+                  </option>
+                ))}
+              </select>
+              <div style={{ marginTop: 4, fontSize: 11, color: colors.textSecondary, fontStyle: "italic" }}>
+                {t(READING_GOAL_CONFIG[readingGoal].descriptionKey)}
+              </div>
+            </div>
+
             {/* Context indicator */}
             <div
               style={{

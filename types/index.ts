@@ -75,3 +75,25 @@ export type Theme = "light" | "dark"
 
 // Language
 export type Language = "en" | "zh"
+
+// Reading Goal - 阅读目标设定
+export type ReadingGoal = "understand_method" | "find_details" | "evaluate_novelty" | "prepare_citation"
+
+export const READING_GOAL_CONFIG: Record<ReadingGoal, { labelKey: string; descriptionKey: string }> = {
+  understand_method: {
+    labelKey: "readingGoal.understandMethod",
+    descriptionKey: "readingGoal.understandMethodDesc"
+  },
+  find_details: {
+    labelKey: "readingGoal.findDetails",
+    descriptionKey: "readingGoal.findDetailsDesc"
+  },
+  evaluate_novelty: {
+    labelKey: "readingGoal.evaluateNovelty",
+    descriptionKey: "readingGoal.evaluateNoveltyDesc"
+  },
+  prepare_citation: {
+    labelKey: "readingGoal.prepareCitation",
+    descriptionKey: "readingGoal.prepareCitationDesc"
+  }
+}

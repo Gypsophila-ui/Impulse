@@ -84,6 +84,17 @@ const translations: Record<Language, Record<string, string>> = {
     "common.apiKeyMissing": "API Key Not Configured\n\nPlease configure your OpenAI API Key first:\n1. Right-click extension icon\n2. Select 'Options'\n3. Enter your API Key",
     "common.selectTextFirst": "Please select text first",
 
+    // Reading Goal
+    "readingGoal.title": "Reading Goal",
+    "readingGoal.understandMethod": "Understand Method",
+    "readingGoal.understandMethodDesc": "Focus on methodology and technical approach",
+    "readingGoal.findDetails": "Find Implementation Details",
+    "readingGoal.findDetailsDesc": "Focus on implementation specifics and parameters",
+    "readingGoal.evaluateNovelty": "Evaluate Novelty",
+    "readingGoal.evaluateNoveltyDesc": "Focus on innovation and contributions",
+    "readingGoal.prepareCitation": "Prepare for Citation",
+    "readingGoal.prepareCitationDesc": "Focus on key findings for reference",
+
     // Options page
     "options.title": "Impulse Settings",
     "options.subtitle": "Configure your OpenAI API key to unlock AI-powered features",
@@ -180,6 +191,17 @@ const translations: Record<Language, Record<string, string>> = {
     "common.output": "输出",
     "common.apiKeyMissing": "未配置 API Key\n\n请先配置 OpenAI API Key:\n1. 右键点击扩展图标\n2. 选择「选项」\n3. 输入 API Key",
     "common.selectTextFirst": "请先选中文本",
+
+    // Reading Goal
+    "readingGoal.title": "阅读目标",
+    "readingGoal.understandMethod": "了解方法",
+    "readingGoal.understandMethodDesc": "侧重方法论和技术路线",
+    "readingGoal.findDetails": "寻找实现细节",
+    "readingGoal.findDetailsDesc": "侧重具体实现和参数设置",
+    "readingGoal.evaluateNovelty": "评估新颖性",
+    "readingGoal.evaluateNoveltyDesc": "侧重创新点和学术贡献",
+    "readingGoal.prepareCitation": "准备引用",
+    "readingGoal.prepareCitationDesc": "侧重关键发现和结论",
 
     // Options page
     "options.title": "Impulse 设置",
