@@ -1,0 +1,5 @@
+export { default as SummaryTab } from "./SummaryTab"
+export { default as TranslationTab } from "./TranslationTab"
+export { default as HighlightTab } from "./HighlightTab"
+export { default as NotesTab } from "./NotesTab"
+export { default as QATab } from "./QATab"
