@@ -377,6 +377,7 @@ ${summarySection}
 # 当前上下文
 - 页面标题：${toolContext.currentTitle}
 - 选中文本：${toolContext.selectedText?.slice(0, 500) || "无"}${(toolContext.selectedText?.length || 0) > 500 ? "..." : ""}
+- 论文全文：${toolContext.paperText ? `已加载 (${toolContext.paperText.length} 字符)` : "未加载"}
 
 # 论文片段
 ${paperContext}

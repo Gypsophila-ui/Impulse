@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from "react"
 import { AlertTriangle, FileText, Sparkles, Zap } from "lucide-react"
+import rehypeKatex from "rehype-katex"
+import remarkMath from "remark-math"
+import ReactMarkdown from "react-markdown"
+import "katex/dist/katex.min.css"
 
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal } from "~types"
 import { type ToolExecutionContext } from "~utils/agent-tools"
@@ -11,92 +15,29 @@ import { deleteChatSession, saveChatSession } from "~utils/storage"
 import Spinner from "./common/Spinner"
 import ReadingGoalSelector from "./common/ReadingGoalSelector"
 
-// Lightweight markdown renderer — avoids react-markdown's Node.js-only deps
-// Handles: **bold**, `code`, bullet lists, numbered lists, blank-line paragraphs
-const MdText: React.FC<{ children: string }> = ({ children }) => {
-  const lines = children.split("\n")
-  const elements: React.ReactNode[] = []
-  let i = 0
-
-  const renderInline = (text: string): React.ReactNode[] => {
-    const parts: React.ReactNode[] = []
-    const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g
-    let last = 0
-    let match: RegExpExecArray | null
-    let key = 0
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > last) parts.push(text.slice(last, match.index))
-      const m = match[0]
-      if (m.startsWith("**")) {
-        parts.push(<strong key={key++}>{m.slice(2, -2)}</strong>)
-      } else if (m.startsWith("`")) {
-        parts.push(
-          <code key={key++} style={{ background: "rgba(0,0,0,0.08)", borderRadius: 3, padding: "1px 4px", fontFamily: "monospace", fontSize: "0.9em" }}>
-            {m.slice(1, -1)}
-          </code>
-        )
-      } else if (m.startsWith("*")) {
-        parts.push(<em key={key++}>{m.slice(1, -1)}</em>)
-      }
-      last = match.index + m.length
-    }
-    if (last < text.length) parts.push(text.slice(last))
-    return parts
-  }
-
-  while (i < lines.length) {
-    const line = lines[i]
-    // Bullet list
-    if (/^[-*•] /.test(line)) {
-      const items: string[] = []
-      while (i < lines.length && /^[-*•] /.test(lines[i])) {
-        items.push(lines[i].replace(/^[-*•] /, ""))
-        i++
-      }
-      elements.push(
-        <ul key={i} style={{ margin: "4px 0", paddingLeft: 16 }}>
-          {items.map((item, j) => <li key={j} style={{ marginBottom: 2 }}>{renderInline(item)}</li>)}
-        </ul>
-      )
-      continue
-    }
-    // Numbered list
-    if (/^\d+\. /.test(line)) {
-      const items: string[] = []
-      while (i < lines.length && /^\d+\. /.test(lines[i])) {
-        items.push(lines[i].replace(/^\d+\. /, ""))
-        i++
-      }
-      elements.push(
-        <ol key={i} style={{ margin: "4px 0", paddingLeft: 16 }}>
-          {items.map((item, j) => <li key={j} style={{ marginBottom: 2 }}>{renderInline(item)}</li>)}
-        </ol>
-      )
-      continue
-    }
-    // Heading
-    const headingMatch = line.match(/^(#{1,3}) (.+)/)
-    if (headingMatch) {
-      const level = headingMatch[1].length
-      const text = headingMatch[2]
-      const style: React.CSSProperties = { margin: "6px 0 2px", fontWeight: 700, fontSize: level === 1 ? 15 : level === 2 ? 14 : 13 }
-      elements.push(<div key={i} style={style}>{renderInline(text)}</div>)
-      i++
-      continue
-    }
-    // Blank line → spacer
-    if (line.trim() === "") {
-      elements.push(<div key={i} style={{ height: 6 }} />)
-      i++
-      continue
-    }
-    // Normal paragraph line
-    elements.push(<span key={i}>{renderInline(line)}<br /></span>)
-    i++
-  }
-
-  return <div style={{ lineHeight: "20px" }}>{elements}</div>
-}
+// Markdown renderer with LaTeX support via react-markdown + remark-math + rehype-katex
+const MdText: React.FC<{ children: string }> = ({ children }) => (
+  <ReactMarkdown
+    remarkPlugins={[remarkMath]}
+    rehypePlugins={[rehypeKatex]}
+    components={{
+      p: ({ children }) => <span style={{ display: "block", marginBottom: 4 }}>{children}</span>,
+      code: ({ children }) => (
+        <code style={{ background: "rgba(0,0,0,0.08)", borderRadius: 3, padding: "1px 4px", fontFamily: "monospace", fontSize: "0.9em" }}>
+          {children}
+        </code>
+      ),
+      ul: ({ children }) => <ul style={{ margin: "4px 0", paddingLeft: 16 }}>{children}</ul>,
+      ol: ({ children }) => <ol style={{ margin: "4px 0", paddingLeft: 16 }}>{children}</ol>,
+      li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
+      h1: ({ children }) => <div style={{ margin: "6px 0 2px", fontWeight: 700, fontSize: 15 }}>{children}</div>,
+      h2: ({ children }) => <div style={{ margin: "6px 0 2px", fontWeight: 700, fontSize: 14 }}>{children}</div>,
+      h3: ({ children }) => <div style={{ margin: "6px 0 2px", fontWeight: 700, fontSize: 13 }}>{children}</div>,
+    }}
+  >
+    {children}
+  </ReactMarkdown>
+)
 
 interface AgentViewProps {
   selectedText: string
@@ -231,6 +172,7 @@ const AgentView: React.FC<AgentViewProps> = ({
 
       const toolContext: ToolExecutionContext = {
         selectedText,
+        paperText: chatContext || selectedText,
         currentUrl,
         currentTitle,
         currentTabId,

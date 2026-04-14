@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import { borderRadius } from "~utils/design-tokens"
-import { X } from "lucide-react"
+import { MessageSquare, X } from "lucide-react"
 
 import type { AskUserQuestionParams, AskUserQuestionResult } from "~types"
 
@@ -20,6 +20,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
   const [selectedOption, setSelectedOption] = useState<string | null>(null)
   const [customInput, setCustomInput] = useState("")
   const [hoveredOption, setHoveredOption] = useState<string | null>(null)
+  const [showCustomInput, setShowCustomInput] = useState(false)
 
   const colors = {
     bg: isDark ? "#1f2937" : "#ffffff",
@@ -32,14 +33,19 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
   }
 
   const handleSubmit = () => {
-    if (selectedOption) {
-      onSubmit({ selected: selectedOption, isCustomInput: false })
-    } else if (params.allowCustomInput && customInput.trim()) {
+    if (showCustomInput && customInput.trim()) {
       onSubmit({ selected: customInput.trim(), isCustomInput: true })
+    } else if (selectedOption) {
+      onSubmit({ selected: selectedOption, isCustomInput: false })
     }
   }
 
-  const canSubmit = selectedOption || (params.allowCustomInput && customInput.trim())
+  const canSubmit = selectedOption || (showCustomInput && customInput.trim())
+
+  const handleCustomOptionClick = () => {
+    setShowCustomInput(true)
+    setSelectedOption(null)
+  }
 
   return (
     <div
@@ -108,7 +114,10 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
           {params.options.map((option, index) => (
             <button
               key={index}
-              onClick={() => setSelectedOption(option.label)}
+              onClick={() => {
+                setSelectedOption(option.label)
+                setShowCustomInput(false)
+              }}
               onMouseEnter={() => setHoveredOption(option.label)}
               onMouseLeave={() => setHoveredOption(null)}
               style={{
@@ -153,30 +162,77 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
               )}
             </button>
           ))}
+
+          <button
+            onClick={handleCustomOptionClick}
+            onMouseEnter={() => setHoveredOption("__custom__")}
+            onMouseLeave={() => setHoveredOption(null)}
+            style={{
+              padding: "12px 16px",
+              borderRadius: borderRadius.md,
+              border: `2px solid ${
+                showCustomInput
+                  ? "#8b5cf6"
+                  : hoveredOption === "__custom__"
+                    ? "#8b5cf6"
+                    : colors.border
+              }`,
+              background: showCustomInput
+                ? "rgba(139, 92, 246, 0.1)"
+                : hoveredOption === "__custom__"
+                  ? "rgba(139, 92, 246, 0.05)"
+                  : colors.cardBg,
+              cursor: "pointer",
+              textAlign: "left",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <MessageSquare size={16} color={showCustomInput ? "#8b5cf6" : colors.textSecondary} />
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: showCustomInput ? "#8b5cf6" : colors.text
+                }}
+              >
+                Chat with Agent
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: colors.textSecondary,
+                marginTop: 4
+              }}
+            >
+              输入自定义问题或指令
+            </div>
+          </button>
         </div>
 
-        {params.allowCustomInput && (
+        {showCustomInput && (
           <div style={{ marginBottom: 16 }}>
-            <input
-              type="text"
+            <textarea
               value={customInput}
-              onChange={(e) => {
-                setCustomInput(e.target.value)
-                setSelectedOption(null)
-              }}
-              placeholder={params.placeholder || "输入自定义回答..."}
+              onChange={(e) => setCustomInput(e.target.value)}
+              placeholder={params.placeholder || "输入你想问的问题或指令..."}
+              rows={3}
               style={{
                 width: "100%",
                 padding: "12px 16px",
                 borderRadius: borderRadius.md,
-                border: `2px solid ${customInput ? colors.accent : colors.border}`,
+                border: `2px solid ${customInput ? "#8b5cf6" : colors.border}`,
                 background: colors.cardBg,
                 color: colors.text,
                 fontSize: 14,
                 outline: "none",
                 fontFamily: "inherit",
-                boxSizing: "border-box"
+                boxSizing: "border-box",
+                resize: "vertical",
+                minHeight: 80
               }}
+              autoFocus
             />
           </div>
         )}
@@ -207,7 +263,9 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
               borderRadius: borderRadius.sm,
               border: "none",
               background: canSubmit
-                ? `linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentHover} 100%)`
+                ? showCustomInput
+                  ? "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)"
+                  : `linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentHover} 100%)`
                 : colors.border,
               color: "#fff",
               fontSize: 13,

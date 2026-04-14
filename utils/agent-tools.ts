@@ -18,6 +18,7 @@ import {
 
 export interface ToolExecutionContext {
   selectedText: string
+  paperText: string
   currentUrl: string
   currentTitle: string
   currentTabId: number | null
@@ -232,18 +233,20 @@ export async function executeToolCall(
 ): Promise<ToolResult> {
   onStatus?.(`正在执行: ${toolName}`, toolName)
 
+  const effectiveText = context.selectedText?.trim() || context.paperText?.trim() || ""
+
   switch (toolName) {
     case "save_note": {
       const comment = args.comment as string
       if (!comment?.trim()) {
         return { success: false, error: "笔记内容不能为空", message: "保存失败：笔记内容为空" }
       }
-      if (!context.selectedText?.trim()) {
-        return { success: false, error: "没有选中文本", message: "保存失败：请先选中要记录的文本" }
+      if (!effectiveText) {
+        return { success: false, error: "没有可用文本", message: "保存失败：请先选中要记录的文本或加载论文全文" }
       }
       try {
         const note = await saveNote(
-          context.selectedText,
+          effectiveText,
           comment,
           context.currentUrl,
           context.currentTitle
@@ -289,21 +292,20 @@ export async function executeToolCall(
           return { success: false, error: "没有有效的短语", message: "高亮失败：没有有效的短语" }
         }
 
-        const phrasesInSelection = context.selectedText
-          ? validPhrases.filter((p) => context.selectedText.includes(p))
+        const phrasesInSelection = effectiveText
+          ? validPhrases.filter((p) => effectiveText.includes(p))
           : []
 
         const result = await applyHighlightsToPage(context.currentTabId, validPhrases)
         if (result.success && result.count > 0) {
-          const sourceText = context.selectedText || "页面内容"
           await saveHighlights(
             validPhrases.slice(0, result.count),
-            sourceText,
+            effectiveText || "页面内容",
             context.currentUrl,
             context.currentTitle
           )
           const note = phrasesInSelection.length < validPhrases.length
-            ? `（其中 ${phrasesInSelection.length} 个在选中文本中）`
+            ? `（其中 ${phrasesInSelection.length} 个在可用文本中）`
             : ""
           return {
             success: true,
@@ -340,11 +342,11 @@ export async function executeToolCall(
     }
 
     case "summarize_selection": {
-      if (!context.selectedText?.trim()) {
-        return { success: false, error: "没有选中文本", message: "摘要失败：请先选中要摘要的文本" }
+      if (!effectiveText) {
+        return { success: false, error: "没有可用文本", message: "摘要失败：请先选中文本或加载论文全文" }
       }
       try {
-        const summary = await summarize(context.selectedText)
+        const summary = await summarize(effectiveText)
         return { success: true, data: { summary }, message: summary }
       } catch (e: any) {
         return { success: false, error: e?.message, message: `摘要失败：${e?.message ?? String(e)}` }
@@ -352,12 +354,12 @@ export async function executeToolCall(
     }
 
     case "translate_selection": {
-      if (!context.selectedText?.trim()) {
-        return { success: false, error: "没有选中文本", message: "翻译失败：请先选中要翻译的文本" }
+      if (!effectiveText) {
+        return { success: false, error: "没有可用文本", message: "翻译失败：请先选中文本或加载论文全文" }
       }
       try {
         const targetLang = (args.target_language as string) || "中文"
-        const translated = await translate(context.selectedText, targetLang)
+        const translated = await translate(effectiveText, targetLang)
         return { success: true, data: { translation: translated, targetLanguage: targetLang }, message: translated }
       } catch (e: any) {
         return { success: false, error: e?.message, message: `翻译失败：${e?.message ?? String(e)}` }
@@ -365,11 +367,11 @@ export async function executeToolCall(
     }
 
     case "extract_paper_metadata": {
-      if (!context.selectedText?.trim()) {
-        return { success: false, error: "没有选中文本", message: "提取失败：请先选中包含论文信息的文本" }
+      if (!effectiveText) {
+        return { success: false, error: "没有可用文本", message: "提取失败：请先选中文本或加载论文全文" }
       }
       try {
-        const metadata = await extractMetadata(context.selectedText)
+        const metadata = await extractMetadata(effectiveText)
         return { success: true, data: metadata, message: `已提取元数据：${metadata.title || "未找到标题"}` }
       } catch (e: any) {
         return { success: false, error: e?.message, message: `提取元数据失败：${e?.message ?? String(e)}` }
