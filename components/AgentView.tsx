@@ -1,14 +1,102 @@
-import React, { useRef } from "react"
-import { AlertTriangle, Bot, FileText, Sparkles, Zap } from "lucide-react"
+import React, { useEffect, useRef, useState } from "react"
+import { AlertTriangle, FileText, Sparkles, Zap } from "lucide-react"
 
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal } from "~types"
 import { type ToolExecutionContext } from "~utils/agent-tools"
 import { borderRadius, shadows, transitions } from "~utils/design-tokens"
 import { agentChat } from "~utils/llm-client"
+import { extractPdfText, isPdfUrl } from "~utils/pdf-extractor"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
 
 import Spinner from "./common/Spinner"
 import ReadingGoalSelector from "./common/ReadingGoalSelector"
+
+// Lightweight markdown renderer — avoids react-markdown's Node.js-only deps
+// Handles: **bold**, `code`, bullet lists, numbered lists, blank-line paragraphs
+const MdText: React.FC<{ children: string }> = ({ children }) => {
+  const lines = children.split("\n")
+  const elements: React.ReactNode[] = []
+  let i = 0
+
+  const renderInline = (text: string): React.ReactNode[] => {
+    const parts: React.ReactNode[] = []
+    const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g
+    let last = 0
+    let match: RegExpExecArray | null
+    let key = 0
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > last) parts.push(text.slice(last, match.index))
+      const m = match[0]
+      if (m.startsWith("**")) {
+        parts.push(<strong key={key++}>{m.slice(2, -2)}</strong>)
+      } else if (m.startsWith("`")) {
+        parts.push(
+          <code key={key++} style={{ background: "rgba(0,0,0,0.08)", borderRadius: 3, padding: "1px 4px", fontFamily: "monospace", fontSize: "0.9em" }}>
+            {m.slice(1, -1)}
+          </code>
+        )
+      } else if (m.startsWith("*")) {
+        parts.push(<em key={key++}>{m.slice(1, -1)}</em>)
+      }
+      last = match.index + m.length
+    }
+    if (last < text.length) parts.push(text.slice(last))
+    return parts
+  }
+
+  while (i < lines.length) {
+    const line = lines[i]
+    // Bullet list
+    if (/^[-*•] /.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^[-*•] /.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*•] /, ""))
+        i++
+      }
+      elements.push(
+        <ul key={i} style={{ margin: "4px 0", paddingLeft: 16 }}>
+          {items.map((item, j) => <li key={j} style={{ marginBottom: 2 }}>{renderInline(item)}</li>)}
+        </ul>
+      )
+      continue
+    }
+    // Numbered list
+    if (/^\d+\. /.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^\d+\. /.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\. /, ""))
+        i++
+      }
+      elements.push(
+        <ol key={i} style={{ margin: "4px 0", paddingLeft: 16 }}>
+          {items.map((item, j) => <li key={j} style={{ marginBottom: 2 }}>{renderInline(item)}</li>)}
+        </ol>
+      )
+      continue
+    }
+    // Heading
+    const headingMatch = line.match(/^(#{1,3}) (.+)/)
+    if (headingMatch) {
+      const level = headingMatch[1].length
+      const text = headingMatch[2]
+      const style: React.CSSProperties = { margin: "6px 0 2px", fontWeight: 700, fontSize: level === 1 ? 15 : level === 2 ? 14 : 13 }
+      elements.push(<div key={i} style={style}>{renderInline(text)}</div>)
+      i++
+      continue
+    }
+    // Blank line → spacer
+    if (line.trim() === "") {
+      elements.push(<div key={i} style={{ height: 6 }} />)
+      i++
+      continue
+    }
+    // Normal paragraph line
+    elements.push(<span key={i}>{renderInline(line)}<br /></span>)
+    i++
+  }
+
+  return <div style={{ lineHeight: "20px" }}>{elements}</div>
+}
 
 interface AgentViewProps {
   selectedText: string
@@ -74,6 +162,51 @@ const AgentView: React.FC<AgentViewProps> = ({
   onAskUserQuestion
 }) => {
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  // PDF auto-extraction state
+  const [pdfExtracting, setPdfExtracting] = useState(false)
+  const [pdfExtractError, setPdfExtractError] = useState<string | null>(null)
+  const [pdfPageCount, setPdfPageCount] = useState<number | null>(null)
+  const [pdfTruncated, setPdfTruncated] = useState(false)
+  // Track which URL we've already extracted so we don't re-extract on re-renders
+  const extractedUrlRef = useRef<string>("")
+
+  // Auto-extract PDF text when AgentView mounts or URL changes
+  useEffect(() => {
+    if (!currentUrl || !isPdfUrl(currentUrl)) return
+    // Already have context (manually set or previously extracted)
+    if (chatContext && extractedUrlRef.current === currentUrl) return
+    // Already extracted this URL
+    if (extractedUrlRef.current === currentUrl) return
+
+    const run = async () => {
+      setPdfExtracting(true)
+      setPdfExtractError(null)
+      extractedUrlRef.current = currentUrl
+
+      try {
+        const result = await extractPdfText(currentUrl)
+        if (result.error) {
+          setPdfExtractError(result.error)
+        } else if (result.text) {
+          onSetChatContext(result.text)
+          setPdfPageCount(result.pageCount)
+          setPdfTruncated(result.truncated)
+        }
+      } finally {
+        setPdfExtracting(false)
+      }
+    }
+
+    void run()
+  }, [currentUrl])
+
+  // Sync selectedText as fallback context when no PDF context exists
+  useEffect(() => {
+    if (!chatContext && selectedText.trim() && !isPdfUrl(currentUrl)) {
+      onSetChatContext(selectedText)
+    }
+  }, [selectedText])
 
   const handleSendChat = async () => {
     if (!chatInput.trim() || chatLoading) return
@@ -174,67 +307,133 @@ const AgentView: React.FC<AgentViewProps> = ({
         colors={colors}
       />
 
-      <div
-        style={{
-          padding: 10,
-          background: chatContext ? "#f0fdf4" : "#fef3c7",
-          border: `1px solid ${chatContext ? "#86efac" : "#fcd34d"}`,
-          borderRadius: borderRadius.sm,
-          marginBottom: 12,
-          fontSize: 12,
-          color: chatContext ? "#166534" : "#92400e",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between"
-        }}
-      >
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {chatContext
-            ? <><FileText size={12} /> Context: {chatContext.slice(0, 60)}{chatContext.length > 60 ? "..." : ""}</>
-            : <><AlertTriangle size={12} /> Select text from PDF to set context</>}
-        </span>
-        {chatContext && (
-          <button
-            onClick={() => {
-              if (selectedText.trim()) {
-                onSetChatContext(selectedText)
-                onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Context updated</>, "success")
-                setTimeout(() => onClearMessage(), 2000)
-              }
-            }}
+      {/* PDF / Context status bar */}
+      {pdfExtracting ? (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "#f5f3ff",
+            border: "1px solid #c4b5fd",
+            borderRadius: borderRadius.sm,
+            marginBottom: 12,
+            fontSize: 12,
+            color: "#5b21b6",
+            display: "flex",
+            alignItems: "center",
+            gap: 8
+          }}
+        >
+          <div
             style={{
-              background: "none",
-              border: "none",
-              color: "#22c55e",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              padding: 4,
-              whiteSpace: "nowrap"
+              width: 12,
+              height: 12,
+              border: "2px solid #c4b5fd",
+              borderTop: "2px solid #8b5cf6",
+              borderRadius: borderRadius.full,
+              animation: "spin 0.8s linear infinite",
+              flexShrink: 0
             }}
-          >
-            Update
-          </button>
-        )}
-      </div>
-
-      <div
-        style={{
-          padding: "8px 12px",
-          background: "#f5f3ff",
-          border: "1px solid #c4b5fd",
-          borderRadius: borderRadius.sm,
-          marginBottom: 12,
-          fontSize: 11,
-          color: "#5b21b6",
-          display: "flex",
-          alignItems: "center",
-          gap: 6
-        }}
-      >
-        <Bot size={14} />
-        <span>Agent 模式 - AI 可以执行工具操作（高亮、笔记、搜索等）</span>
-      </div>
+          />
+          正在提取 PDF 全文...
+        </div>
+      ) : pdfExtractError ? (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "#fef3c7",
+            border: "1px solid #fcd34d",
+            borderRadius: borderRadius.sm,
+            marginBottom: 12,
+            fontSize: 12,
+            color: "#92400e",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 6
+          }}
+        >
+          <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>{pdfExtractError}</div>
+            <div style={{ opacity: 0.8 }}>请在 PDF 中选中文字后，它会自动作为上下文</div>
+          </div>
+        </div>
+      ) : chatContext ? (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "#f0fdf4",
+            border: "1px solid #86efac",
+            borderRadius: borderRadius.sm,
+            marginBottom: 12,
+            fontSize: 12,
+            color: "#166534",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 8
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "flex-start", gap: 4, flex: 1, minWidth: 0 }}>
+            <FileText size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              {isPdfUrl(currentUrl) && pdfPageCount !== null ? (
+                <>
+                  <span style={{ fontWeight: 600 }}>已加载 PDF 全文</span>
+                  {" · "}
+                  {pdfPageCount} 页
+                  {pdfTruncated && " · 已截取前 60k 字符"}
+                </>
+              ) : (
+                <>
+                  <span style={{ fontWeight: 600 }}>已设置上下文</span>
+                  {" · "}
+                  {chatContext.slice(0, 50)}{chatContext.length > 50 ? "..." : ""}
+                </>
+              )}
+            </span>
+          </span>
+          {!isPdfUrl(currentUrl) && selectedText.trim() && selectedText !== chatContext && (
+            <button
+              onClick={() => {
+                onSetChatContext(selectedText)
+                onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> 上下文已更新</>, "success")
+                setTimeout(() => onClearMessage(), 2000)
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#16a34a",
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 4px",
+                whiteSpace: "nowrap",
+                flexShrink: 0
+              }}
+            >
+              更新
+            </button>
+          )}
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "#fef3c7",
+            border: "1px solid #fcd34d",
+            borderRadius: borderRadius.sm,
+            marginBottom: 12,
+            fontSize: 12,
+            color: "#92400e",
+            display: "flex",
+            alignItems: "center",
+            gap: 6
+          }}
+        >
+          <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+          <span>请在 PDF 中选中一段文字，Agent 将以此作为上下文</span>
+        </div>
+      )}
 
       <div
         style={{
@@ -290,7 +489,11 @@ const AgentView: React.FC<AgentViewProps> = ({
                   boxShadow: shadows.sm
                 }}
               >
-                {msg.content}
+                {msg.role === "assistant" ? (
+                  <MdText>{msg.content}</MdText>
+                ) : (
+                  msg.content
+                )}
               </div>
             </div>
           ))
