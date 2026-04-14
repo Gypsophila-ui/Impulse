@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { FileText } from "lucide-react"
 
 import type { TabKey } from "./Header"
@@ -93,7 +94,7 @@ const ContentArea: React.FC<ContentAreaProps> = ({
             boxSizing: "border-box",
             padding: 12,
             border: `2px solid ${colors.border}`,
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             background: colors.inputBg,
             color: colors.text,
             fontFamily: "inherit",

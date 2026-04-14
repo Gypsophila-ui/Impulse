@@ -1,4 +1,5 @@
 import React, { useRef } from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle, Bot, FileText, Sparkles } from "lucide-react"
 
 import type { ChatMessage, ReadingGoal } from "~types"
@@ -17,6 +18,7 @@ interface QATabProps {
   chatContext: string
   readingGoal: ReadingGoal
   currentUrl: string
+  currentTitle: string
   hasKey: boolean
   colors: {
     textSecondary: string
@@ -42,6 +44,7 @@ const QATab: React.FC<QATabProps> = ({
   chatContext,
   readingGoal,
   currentUrl,
+  currentTitle,
   hasKey,
   colors,
   onShowMessage,
@@ -72,11 +75,13 @@ const QATab: React.FC<QATabProps> = ({
 
     try {
       const context = chatContext || selectedText
-      const reply = await chatWithContext(newMessages, context)
-      onSetChatMessages([...newMessages, { role: "assistant", content: reply }])
-      await saveChatSession(currentUrl, newMessages)
+      const reply = await chatWithContext(newMessages, context, readingGoal)
+      const updatedMessages: ChatMessage[] = [...newMessages, { role: "assistant", content: reply }]
+      onSetChatMessages(updatedMessages)
+      await saveChatSession(currentUrl, currentTitle, updatedMessages, context)
     } catch (e: any) {
-      onSetChatMessages([...newMessages, { role: "assistant", content: `Error: ${e?.message ?? String(e)}` }])
+      const errorMessages: ChatMessage[] = [...newMessages, { role: "assistant", content: `Error: ${e?.message ?? String(e)}` }]
+      onSetChatMessages(errorMessages)
     } finally {
       onSetChatLoading(false)
     }
@@ -103,7 +108,7 @@ const QATab: React.FC<QATabProps> = ({
           padding: 10,
           background: chatContext ? "#eff6ff" : "#fef3c7",
           border: `1px solid ${chatContext ? "#bfdbfe" : "#fcd34d"}`,
-          borderRadius: 8,
+          borderRadius: borderRadius.sm,
           marginBottom: 12,
           fontSize: 12,
           color: chatContext ? "#1e40af" : "#92400e",
@@ -160,7 +165,7 @@ const QATab: React.FC<QATabProps> = ({
             style={{
               padding: 20,
               border: `2px dashed ${colors.border}`,
-              borderRadius: 10,
+              borderRadius: borderRadius.md,
               textAlign: "center",
               color: "#9ca3af",
               fontSize: 13
@@ -223,7 +228,7 @@ const QATab: React.FC<QATabProps> = ({
                   height: 14,
                   border: "2px solid #d1d5db",
                   borderTop: "2px solid #3b82f6",
-                  borderRadius: "50%",
+                  borderRadius: borderRadius.full,
                   animation: "spin 0.8s linear infinite"
                 }}
               />
@@ -250,7 +255,7 @@ const QATab: React.FC<QATabProps> = ({
             padding: "10px 14px",
             fontSize: 13,
             border: `2px solid ${colors.border}`,
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             outline: "none",
             fontFamily: "inherit",
             transition: "border-color 0.2s ease"
@@ -264,7 +269,7 @@ const QATab: React.FC<QATabProps> = ({
           className="btn-hover"
           style={{
             padding: "10px 16px",
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             background:
               chatInput.trim() && !chatLoading
                 ? "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"

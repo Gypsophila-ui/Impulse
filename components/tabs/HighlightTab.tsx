@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle, Sparkles, Trash2, X } from "lucide-react"
 
 import type { Highlight } from "~utils/storage"
@@ -168,7 +169,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
         style={{
           width: "100%",
           padding: "12px 16px",
-          borderRadius: 10,
+          borderRadius: borderRadius.md,
           background:
             canUseSelection && !generatingHighlights
               ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
@@ -203,7 +204,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
           style={{
             marginTop: 12,
             padding: 12,
-            borderRadius: 8,
+            borderRadius: borderRadius.sm,
             background: outputType === "success"
               ? "#d1fae5"
               : outputType === "warning"
@@ -279,7 +280,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
             style={{
               padding: 20,
               border: `2px dashed ${colors.border}`,
-              borderRadius: 10,
+              borderRadius: borderRadius.md,
               textAlign: "center",
               color: "#9ca3af",
               fontSize: 13
@@ -299,7 +300,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
                 style={{
                   padding: 10,
                   border: "2px solid #fcd34d",
-                  borderRadius: 8,
+                  borderRadius: borderRadius.sm,
                   background: "#fefce8",
                   transition: "all 0.2s ease"
                 }}
@@ -337,7 +338,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
                           display: "inline-block",
                           width: 6,
                           height: 6,
-                          borderRadius: "50%",
+                          borderRadius: borderRadius.full,
                           background: "#f59e0b"
                         }}
                       />

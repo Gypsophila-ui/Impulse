@@ -1,4 +1,5 @@
 import React, { useState } from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { X } from "lucide-react"
 
 import type { AskUserQuestionParams, AskUserQuestionResult } from "~types"
@@ -60,7 +61,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
       <div
         style={{
           background: colors.bg,
-          borderRadius: 16,
+          borderRadius: borderRadius.lg,
           padding: 24,
           maxWidth: 400,
           width: "90%",
@@ -112,7 +113,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
               onMouseLeave={() => setHoveredOption(null)}
               style={{
                 padding: "12px 16px",
-                borderRadius: 10,
+                borderRadius: borderRadius.md,
                 border: `2px solid ${
                   selectedOption === option.label
                     ? colors.accent
@@ -167,7 +168,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
               style={{
                 width: "100%",
                 padding: "12px 16px",
-                borderRadius: 10,
+                borderRadius: borderRadius.md,
                 border: `2px solid ${customInput ? colors.accent : colors.border}`,
                 background: colors.cardBg,
                 color: colors.text,
@@ -186,7 +187,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
             style={{
               flex: 1,
               padding: "10px 16px",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               border: `1px solid ${colors.border}`,
               background: "transparent",
               color: colors.textSecondary,
@@ -203,7 +204,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
             style={{
               flex: 1,
               padding: "10px 16px",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               border: "none",
               background: canSubmit
                 ? `linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentHover} 100%)`

@@ -388,7 +388,7 @@ export default function Sidepanel() {
           onSetLastToolCalls={setLastToolCalls}
           onSetChatSummary={setChatSummary}
           onSetReadingGoal={setReadingGoal}
-          onAskUserQuestion={askUserQuestion}
+          onAskUserQuestion={handleAskUserQuestion}
         />
       ) : (
         <>
@@ -493,6 +493,7 @@ export default function Sidepanel() {
                 chatContext={chatContext}
                 readingGoal={readingGoal}
                 currentUrl={currentUrl}
+                currentTitle={currentTitle}
                 hasKey={hasKey}
                 colors={colors}
                 onShowMessage={showMessage}

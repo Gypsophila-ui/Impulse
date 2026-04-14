@@ -1,4 +1,5 @@
 import React, { useState } from "react"
+import { borderRadius, shadows, transitions } from "~utils/design-tokens"
 import { Settings, X } from "lucide-react"
 
 import { resetClient } from "~utils/llm-client"
@@ -67,7 +68,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
       <div
         style={{
           background: "#fff",
-          borderRadius: 14,
+          borderRadius: borderRadius.lg,
           width: "100%",
           maxWidth: 360,
           boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
@@ -112,7 +113,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   padding: "10px 36px 10px 10px",
                   fontSize: 13,
                   border: "2px solid #e5e7eb",
-                  borderRadius: 8,
+                  borderRadius: borderRadius.sm,
                   boxSizing: "border-box",
                   fontFamily: "monospace",
                   outline: "none"
@@ -155,7 +156,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                       fontSize: 12,
                       fontWeight: 600,
                       border: isActive ? "2px solid #3b82f6" : "2px solid #e5e7eb",
-                      borderRadius: 6,
+                      borderRadius: borderRadius.xs,
                       background: isActive ? "#eff6ff" : "#fff",
                       color: isActive ? "#3b82f6" : "#374151",
                       cursor: "pointer"
@@ -178,7 +179,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   padding: "10px",
                   fontSize: 13,
                   border: "2px solid #e5e7eb",
-                  borderRadius: 8,
+                  borderRadius: borderRadius.sm,
                   boxSizing: "border-box",
                   fontFamily: "monospace",
                   outline: "none"
@@ -202,7 +203,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   padding: "10px",
                   fontSize: 13,
                   border: "2px solid #e5e7eb",
-                  borderRadius: 8,
+                  borderRadius: borderRadius.sm,
                   background: "#fff",
                   cursor: "pointer",
                   outline: "none"
@@ -223,7 +224,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   padding: "10px",
                   fontSize: 13,
                   border: "2px solid #e5e7eb",
-                  borderRadius: 8,
+                  borderRadius: borderRadius.sm,
                   boxSizing: "border-box",
                   fontFamily: "monospace",
                   outline: "none"
@@ -273,7 +274,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                 background: configSaving || !configApiKey.trim() ? "#cbd5e1" : "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
                 color: "#fff",
                 border: "none",
-                borderRadius: 8,
+                borderRadius: borderRadius.sm,
                 cursor: configSaving || !configApiKey.trim() ? "not-allowed" : "pointer"
               }}
             >
@@ -299,7 +300,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   background: "#fff",
                   color: "#ef4444",
                   border: "2px solid #ef4444",
-                  borderRadius: 8,
+                  borderRadius: borderRadius.sm,
                   cursor: "pointer"
                 }}
               >
@@ -314,7 +315,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                 marginTop: 12,
                 padding: "10px 12px",
                 fontSize: 12,
-                borderRadius: 8,
+                borderRadius: borderRadius.sm,
                 background: configMessage.startsWith("success") ? "#d1fae5" : "#fee2e2",
                 color: configMessage.startsWith("success") ? "#065f46" : "#991b1b",
                 animation: "fadeIn 0.3s ease"

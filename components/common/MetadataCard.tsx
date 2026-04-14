@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { FileText, Sparkles } from "lucide-react"
 
 import type { PaperMetadata } from "~types"
@@ -69,7 +70,7 @@ const MetadataCard: React.FC<MetadataCardProps> = ({
       <div
         style={{
           border: "1px solid #e5e7eb",
-          borderRadius: 8,
+          borderRadius: borderRadius.sm,
           background: "#fff",
           overflow: "hidden",
           marginBottom: 4
@@ -113,7 +114,7 @@ const MetadataCard: React.FC<MetadataCardProps> = ({
                 background: "#eff6ff",
                 color: "#3b82f6",
                 border: "1px solid #bfdbfe",
-                borderRadius: 6,
+                borderRadius: borderRadius.xs,
                 cursor: "pointer",
                 fontWeight: 600
               }}>
@@ -136,7 +137,7 @@ const MetadataCard: React.FC<MetadataCardProps> = ({
         background: "#f9fafb",
         color: "#6b7280",
         border: "1px dashed #d1d5db",
-        borderRadius: 8,
+        borderRadius: borderRadius.sm,
         cursor: extractingMetadata ? "not-allowed" : "pointer",
         fontWeight: 600,
         marginBottom: 4

@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle, Globe, X } from "lucide-react"
 
 import { translate } from "~utils/llm-client"
@@ -59,7 +60,7 @@ const TranslationTab: React.FC<TranslationTabProps> = ({
         style={{
           width: "100%",
           padding: "12px 16px",
-          borderRadius: 10,
+          borderRadius: borderRadius.md,
           background:
             canUseSelection && !loading
               ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
@@ -105,7 +106,7 @@ const TranslationTab: React.FC<TranslationTabProps> = ({
             lineHeight: "22px",
             padding: 16,
             border: `2px solid ${colors.border}`,
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             minHeight: 120,
             background: colors.cardBg,
             color: colors.text,

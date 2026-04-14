@@ -3,20 +3,12 @@ import { AlertTriangle, Bot, FileText, Sparkles, Zap } from "lucide-react"
 
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal } from "~types"
 import { type ToolExecutionContext } from "~utils/agent-tools"
-import { t } from "~utils/i18n"
+import { borderRadius, shadows, transitions } from "~utils/design-tokens"
 import { agentChat } from "~utils/llm-client"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
 
-import Spinner from "../common/Spinner"
-import ReadingGoalSelector from "../common/ReadingGoalSelector"
-
-interface ToolCallInfo {
-  name: string
-  result: {
-    success: boolean
-    message: string
-  }
-}
+import Spinner from "./common/Spinner"
+import ReadingGoalSelector from "./common/ReadingGoalSelector"
 
 interface AgentViewProps {
   selectedText: string
@@ -25,7 +17,7 @@ interface AgentViewProps {
   chatLoading: boolean
   chatContext: string
   agentStatus: string | null
-  lastToolCalls: ToolCallInfo[]
+  lastToolCalls: AgentChatResult["toolCallsExecuted"]
   chatSummary: string | undefined
   readingGoal: ReadingGoal
   currentUrl: string
@@ -48,7 +40,7 @@ interface AgentViewProps {
   onSetChatMessages: (messages: ChatMessage[]) => void
   onSetChatContext: (context: string) => void
   onSetAgentStatus: (status: string | null) => void
-  onSetLastToolCalls: (calls: ToolCallInfo[]) => void
+  onSetLastToolCalls: (calls: AgentChatResult["toolCallsExecuted"]) => void
   onSetChatSummary: (summary: string | undefined) => void
   onSetReadingGoal: (goal: ReadingGoal) => void
   onAskUserQuestion: (params: AskUserQuestionParams) => Promise<AskUserQuestionResult>
@@ -124,18 +116,19 @@ const AgentView: React.FC<AgentViewProps> = ({
       )
 
       if (result.success) {
-        onSetChatMessages([...newMessages, { role: "assistant", content: result.message }])
+        const assistantMessage: ChatMessage = { role: "assistant", content: result.message }
+        const updatedMessages = [...newMessages, assistantMessage]
+        onSetChatMessages(updatedMessages)
         if (result.newSummary) {
           onSetChatSummary(result.newSummary)
         }
         if (result.toolCallsExecuted) {
-          onSetLastToolCalls(result.toolCallsExecuted as ToolCallInfo[])
+          onSetLastToolCalls(result.toolCallsExecuted)
         }
+        await saveChatSession(currentUrl, currentTitle, updatedMessages, context, result.newSummary || chatSummary)
       } else {
         onSetChatMessages([...newMessages, { role: "assistant", content: `Error: ${result.message}` }])
       }
-
-      await saveChatSession(currentUrl, newMessages)
     } catch (e: any) {
       onSetChatMessages([...newMessages, { role: "assistant", content: `Error: ${e?.message ?? String(e)}` }])
     } finally {
@@ -186,7 +179,7 @@ const AgentView: React.FC<AgentViewProps> = ({
           padding: 10,
           background: chatContext ? "#f0fdf4" : "#fef3c7",
           border: `1px solid ${chatContext ? "#86efac" : "#fcd34d"}`,
-          borderRadius: 8,
+          borderRadius: borderRadius.sm,
           marginBottom: 12,
           fontSize: 12,
           color: chatContext ? "#166534" : "#92400e",
@@ -230,7 +223,7 @@ const AgentView: React.FC<AgentViewProps> = ({
           padding: "8px 12px",
           background: "#f5f3ff",
           border: "1px solid #c4b5fd",
-          borderRadius: 8,
+          borderRadius: borderRadius.sm,
           marginBottom: 12,
           fontSize: 11,
           color: "#5b21b6",
@@ -259,7 +252,7 @@ const AgentView: React.FC<AgentViewProps> = ({
             style={{
               padding: 20,
               border: `2px dashed ${colors.border}`,
-              borderRadius: 10,
+              borderRadius: borderRadius.md,
               textAlign: "center",
               color: "#9ca3af",
               fontSize: 13
@@ -285,7 +278,7 @@ const AgentView: React.FC<AgentViewProps> = ({
                 style={{
                   maxWidth: "85%",
                   padding: "10px 14px",
-                  borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                  borderRadius: msg.role === "user" ? borderRadius.bubble.user : borderRadius.bubble.assistant,
                   background:
                     msg.role === "user"
                       ? "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)"
@@ -294,7 +287,7 @@ const AgentView: React.FC<AgentViewProps> = ({
                   fontSize: 13,
                   lineHeight: "20px",
                   whiteSpace: "pre-wrap",
-                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)"
+                  boxShadow: shadows.sm
                 }}
               >
                 {msg.content}
@@ -307,7 +300,7 @@ const AgentView: React.FC<AgentViewProps> = ({
             <div
               style={{
                 padding: "10px 14px",
-                borderRadius: "14px 14px 14px 4px",
+                borderRadius: borderRadius.bubble.assistant,
                 background: colors.sectionBg,
                 color: "#6b7280",
                 fontSize: 13,
@@ -323,7 +316,7 @@ const AgentView: React.FC<AgentViewProps> = ({
                   height: 14,
                   border: "2px solid #c4b5fd",
                   borderTop: "2px solid #8b5cf6",
-                  borderRadius: "50%",
+                  borderRadius: borderRadius.full,
                   animation: "spin 0.8s linear infinite"
                 }}
               />
@@ -337,7 +330,7 @@ const AgentView: React.FC<AgentViewProps> = ({
               padding: "8px 12px",
               background: "#f0fdf4",
               border: "1px solid #86efac",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               fontSize: 11,
               color: "#166534"
             }}
@@ -373,12 +366,12 @@ const AgentView: React.FC<AgentViewProps> = ({
             padding: "10px 14px",
             fontSize: 13,
             border: `2px solid ${colors.border}`,
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             outline: "none",
             fontFamily: "inherit",
             background: colors.inputBg,
             color: colors.text,
-            transition: "border-color 0.2s ease"
+            transition: transitions.normal
           }}
           onFocus={(e) => (e.target.style.borderColor = "#8b5cf6")}
           onBlur={(e) => (e.target.style.borderColor = colors.border)}
@@ -389,7 +382,7 @@ const AgentView: React.FC<AgentViewProps> = ({
           className="btn-hover"
           style={{
             padding: "10px 16px",
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             background:
               chatInput.trim() && !chatLoading
                 ? "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)"

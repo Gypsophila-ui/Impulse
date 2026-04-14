@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { Target } from "lucide-react"
 
 import type { ReadingGoal } from "~types"
@@ -41,7 +42,7 @@ const ReadingGoalSelector: React.FC<ReadingGoalSelectorProps> = ({
         style={{
           width: "100%",
           padding: "10px 12px",
-          borderRadius: 8,
+          borderRadius: borderRadius.sm,
           border: `2px solid ${colors.border}`,
           background: colors.cardBg,
           color: colors.text,

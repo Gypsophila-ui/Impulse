@@ -2,6 +2,7 @@ import React from "react"
 import { Bot, FileText, Globe, MessageSquare, Moon, Settings, Sparkles, Sun, Zap } from "lucide-react"
 
 import type { ChatMessage, Language, PaperMetadata, Theme } from "~types"
+import { borderRadius, shadows } from "~utils/design-tokens"
 import { downloadMarkdown, generateMarkdown } from "~utils/export"
 import { getCurrentLanguage, setCurrentLanguage, t } from "~utils/i18n"
 import { getLLMConfig } from "~utils/storage"
@@ -122,7 +123,7 @@ const Header: React.FC<HeaderProps> = ({
               fontSize: 10, 
               padding: "2px 6px", 
               background: "rgba(255,255,255,0.2)", 
-              borderRadius: 4,
+              borderRadius: borderRadius.xs,
               fontWeight: 600
             }}>
               {isAgentMode ? "Agent" : "Assistant"}
@@ -143,7 +144,7 @@ const Header: React.FC<HeaderProps> = ({
               background: isAgentMode ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.25)",
               color: "#fff",
               border: "1px solid rgba(255, 255, 255, 0.3)",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               cursor: "pointer",
               backdropFilter: "blur(10px)",
               display: "flex",
@@ -163,7 +164,7 @@ const Header: React.FC<HeaderProps> = ({
               background: "rgba(255, 255, 255, 0.25)",
               color: "#fff",
               border: "1px solid rgba(255, 255, 255, 0.3)",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               cursor: "pointer",
               backdropFilter: "blur(10px)",
               display: "flex",
@@ -181,7 +182,7 @@ const Header: React.FC<HeaderProps> = ({
               background: "rgba(255, 255, 255, 0.25)",
               color: "#fff",
               border: "1px solid rgba(255, 255, 255, 0.3)",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               cursor: "pointer",
               backdropFilter: "blur(10px)"
             }}>
@@ -198,7 +199,7 @@ const Header: React.FC<HeaderProps> = ({
               background: "rgba(255, 255, 255, 0.25)",
               color: "#fff",
               border: "1px solid rgba(255, 255, 255, 0.3)",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               cursor: "pointer",
               backdropFilter: "blur(10px)"
             }}>
@@ -214,7 +215,7 @@ const Header: React.FC<HeaderProps> = ({
               background: "rgba(255, 255, 255, 0.25)",
               color: "#fff",
               border: "1px solid rgba(255, 255, 255, 0.3)",
-              borderRadius: 8,
+              borderRadius: borderRadius.sm,
               cursor: "pointer",
               backdropFilter: "blur(10px)"
             }}>
@@ -237,7 +238,7 @@ const Header: React.FC<HeaderProps> = ({
                   padding: "8px 4px",
                   fontSize: 10,
                   fontWeight: 600,
-                  borderRadius: 8,
+                  borderRadius: borderRadius.sm,
                   border: "none",
                   background: isActive ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.15)",
                   color: isActive ? "#3b82f6" : "rgba(255, 255, 255, 0.9)",

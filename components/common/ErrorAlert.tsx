@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle } from "lucide-react"
 
 interface ErrorAlertProps {
@@ -15,7 +16,7 @@ const ErrorAlert: React.FC<ErrorAlertProps> = ({ error }) => {
         padding: "12px",
         background: "#fee2e2",
         border: "1px solid #fca5a5",
-        borderRadius: 8,
+        borderRadius: borderRadius.sm,
         color: "#991b1b",
         fontSize: 12,
         lineHeight: "18px",

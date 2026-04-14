@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle, Pencil, Sparkles, X } from "lucide-react"
 
 import type { ReadingGoal } from "~types"
@@ -71,7 +72,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
         style={{
           width: "100%",
           padding: "12px 16px",
-          borderRadius: 10,
+          borderRadius: borderRadius.md,
           background:
             canUseSelection && !loading
               ? "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"
@@ -118,7 +119,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
             lineHeight: "22px",
             padding: 16,
             border: `2px solid ${colors.border}`,
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             minHeight: 120,
             background: colors.cardBg,
             color: colors.text,

@@ -1,4 +1,5 @@
 import React from "react"
+import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle, FileText, MessageSquare, Pencil, Save, Sparkles, Trash2, X } from "lucide-react"
 
 import type { Note } from "~utils/storage"
@@ -152,7 +153,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
           boxSizing: "border-box",
           padding: 12,
           border: `2px solid ${colors.border}`,
-          borderRadius: 10,
+          borderRadius: borderRadius.md,
           background: colors.cardBg,
           color: "#374151",
           fontFamily: "inherit",
@@ -175,7 +176,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
           style={{
             flex: 1,
             padding: "12px 16px",
-            borderRadius: 10,
+            borderRadius: borderRadius.md,
             background:
               ((editingNoteId ? true : canUseSelection) &&
                 commentDraft.trim() &&
@@ -224,7 +225,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
             }}
             style={{
               padding: "12px 16px",
-              borderRadius: 10,
+              borderRadius: borderRadius.md,
               background: colors.cardBg,
               color: "#6b7280",
               border: `2px solid ${colors.border}`,
@@ -244,7 +245,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
             onClick={() => onSetCommentDraft("")}
             style={{
               padding: "12px 16px",
-              borderRadius: 10,
+              borderRadius: borderRadius.md,
               background: colors.cardBg,
               color: "#6b7280",
               border: `2px solid ${colors.border}`,
@@ -274,7 +275,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
           style={{
             marginTop: 12,
             padding: 10,
-            borderRadius: 8,
+            borderRadius: borderRadius.sm,
             background: outputType === "success" ? "#d1fae5" : "#fee2e2",
             color: outputType === "success" ? "#065f46" : "#991b1b",
             fontSize: 12,
@@ -323,7 +324,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
             style={{
               padding: 20,
               border: `2px dashed ${colors.border}`,
-              borderRadius: 10,
+              borderRadius: borderRadius.md,
               textAlign: "center",
               color: "#9ca3af",
               fontSize: 13
@@ -343,7 +344,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
                 style={{
                   padding: 12,
                   border: `2px solid ${colors.border}`,
-                  borderRadius: 10,
+                  borderRadius: borderRadius.md,
                   background: colors.cardBg,
                   transition: "all 0.2s ease"
                 }}
