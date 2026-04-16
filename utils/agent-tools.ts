@@ -1,9 +1,12 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions"
 
-import type { AskUserQuestionCallback, PaperMetadata } from "~types"
+import type { AskUserQuestionCallback, ComparisonDimension, ComparisonResult, PaperMetadata, PaperSnapshot } from "~types"
 import {
   getHighlightsByUrl,
   getNotesByUrl,
+  getPaperSnapshot,
+  listCandidatePapers,
+  saveComparison,
   saveHighlights,
   saveNote,
   type Highlight,
@@ -43,7 +46,7 @@ export const PAPER_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "save_note",
       description:
-        "保存一条阅读笔记，关联当前选中的文本。当用户想要记录、保存、存储某个观点或内容时使用。",
+        "保存一条阅读笔记，关联当前选中的文本或论文全文。当用户想要记录、保存、存储某个观点或内容时使用。如果没有选中文本，会自动使用论文全文作为上下文。",
       parameters: {
         type: "object",
         properties: {
@@ -206,6 +209,95 @@ export const PAPER_TOOLS: ChatCompletionTool[] = [
         required: ["question", "options"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_candidate_papers",
+      description:
+        "列出所有可用于对比的论文候选，包括当前论文和历史阅读过的论文。当用户想比较论文、或需要了解有哪些论文可供分析时使用。",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "number",
+            description: "最多返回多少篇论文，默认为 10"
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_paper_summary",
+      description:
+        "获取指定论文的结构化摘要，包括元数据、笔记、高亮和上下文预览。用于在对比前了解某篇论文的核心内容。",
+      parameters: {
+        type: "object",
+        properties: {
+          url: {
+            type: "string",
+            description: "论文的 URL"
+          }
+        },
+        required: ["url"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "compare_papers",
+      description:
+        "对比多篇论文，生成结构化的对比表格和总结。当用户想了解论文间的异同、找出各自优缺点或决定读哪篇时使用。",
+      parameters: {
+        type: "object",
+        properties: {
+          paper_urls: {
+            type: "array",
+            items: { type: "string" },
+            description: "要对比的论文 URL 列表（2-5 篇）"
+          },
+          dimensions: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: ["contribution", "method", "experiment", "limitation", "novelty", "practical_value"]
+            },
+            description: "对比维度，默认为 contribution、method、experiment、limitation"
+          },
+          focus: {
+            type: "string",
+            description: "对比的重点或用户具体关心的问题，帮助生成更有针对性的分析"
+          }
+        },
+        required: ["paper_urls"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_comparison",
+      description:
+        "将对比结果保存到本地，方便后续查阅。在生成对比结果后，如用户希望保存，则调用此工具。",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "对比任务的标题，例如'Transformer vs BERT 方法对比'"
+          },
+          comparison_json: {
+            type: "string",
+            description: "compare_papers 返回的 ComparisonResult JSON 字符串"
+          }
+        },
+        required: ["title", "comparison_json"]
+      }
+    }
   }
 ]
 
@@ -244,6 +336,7 @@ export async function executeToolCall(
       if (!effectiveText) {
         return { success: false, error: "没有可用文本", message: "保存失败：请先选中要记录的文本或加载论文全文" }
       }
+      const textSource = context.selectedText?.trim() ? "选中文本" : "论文全文"
       try {
         const note = await saveNote(
           effectiveText,
@@ -254,7 +347,7 @@ export async function executeToolCall(
         return {
           success: true,
           data: note,
-          message: `已保存笔记：${comment.slice(0, 30)}${comment.length > 30 ? "..." : ""}`
+          message: `已保存笔记（关联${textSource}）：${comment.slice(0, 30)}${comment.length > 30 ? "..." : ""}`
         }
       } catch (e: any) {
         return { success: false, error: e?.message, message: `保存笔记失败：${e?.message ?? String(e)}` }
@@ -439,11 +532,151 @@ export async function executeToolCall(
       }
     }
 
+    case "list_candidate_papers": {
+      const limit = (args.limit as number) || 10
+      try {
+        const candidates = await listCandidatePapers()
+        const sliced = candidates.slice(0, limit)
+        if (sliced.length === 0) {
+          return {
+            success: true,
+            data: [],
+            message: "暂无可对比的论文。请先阅读并保存几篇论文（有笔记、高亮或元数据）后再试。"
+          }
+        }
+        const list = sliced.map((p, i) => `${i + 1}. ${p.title} (${p.year || "年份未知"}) — ${p.url}`).join("\n")
+        return {
+          success: true,
+          data: sliced,
+          message: `找到 ${sliced.length} 篇可对比论文：\n${list}`
+        }
+      } catch (e: any) {
+        return { success: false, error: e?.message, message: `获取论文列表失败：${e?.message ?? String(e)}` }
+      }
+    }
+
+    case "get_paper_summary": {
+      const url = args.url as string
+      if (!url?.trim()) {
+        return { success: false, error: "URL 为空", message: "获取摘要失败：请提供论文 URL" }
+      }
+      try {
+        const snapshot = await getPaperSnapshot(url)
+        if (!snapshot) {
+          return { success: false, error: "未找到该论文", message: `未找到 URL 为 ${url} 的论文数据，请确认该论文已被阅读并有笔记或高亮记录` }
+        }
+        return {
+          success: true,
+          data: snapshot,
+          message: `已获取《${snapshot.title}》的摘要（${snapshot.notes.length} 条笔记，${snapshot.highlights.length} 个高亮）`
+        }
+      } catch (e: any) {
+        return { success: false, error: e?.message, message: `获取论文摘要失败：${e?.message ?? String(e)}` }
+      }
+    }
+
+    case "compare_papers": {
+      const paperUrls = args.paper_urls as string[]
+      const dimensions = (args.dimensions as ComparisonDimension[]) || ["contribution", "method", "experiment", "limitation"]
+      const focus = (args.focus as string) || ""
+
+      if (!paperUrls?.length || paperUrls.length < 2) {
+        return { success: false, error: "至少需要 2 篇论文", message: "对比失败：请提供至少 2 篇论文的 URL" }
+      }
+      if (paperUrls.length > 5) {
+        return { success: false, error: "最多支持 5 篇", message: "对比失败：最多同时对比 5 篇论文" }
+      }
+
+      try {
+        onStatus?.("正在收集论文数据...", toolName)
+
+        // Collect snapshots for all papers
+        const snapshots = await Promise.all(paperUrls.map((u) => getPaperSnapshot(u)))
+        const validSnapshots = snapshots.filter((s): s is PaperSnapshot => s !== null)
+
+        if (validSnapshots.length < 2) {
+          return {
+            success: false,
+            error: "有效论文不足",
+            message: `对比失败：只找到 ${validSnapshots.length} 篇有效论文数据，至少需要 2 篇。请确认论文已被阅读并有笔记或元数据记录。`
+          }
+        }
+
+        onStatus?.("正在生成对比分析...", toolName)
+
+        // Build a condensed prompt for the LLM to generate comparison
+        const paperSummaries = validSnapshots.map((s, i) => {
+          const noteText = s.notes.map((n) => `- ${n.comment}`).join("\n") || "（无笔记）"
+          const highlightText = s.highlights.length > 0 ? s.highlights.join("、") : "（无高亮）"
+          const context = s.contextPreview || "（无上下文）"
+          return `### 论文 ${i + 1}：${s.title}
+URL: ${s.url}
+作者：${s.authors.join(", ") || "未知"}  年份：${s.year || "未知"}
+用户笔记：
+${noteText}
+关键高亮：${highlightText}
+文本预览：${context.slice(0, 400)}`
+        }).join("\n\n")
+
+        const dimensionLabels: Record<string, string> = {
+          contribution: "核心贡献",
+          method: "方法",
+          experiment: "实验",
+          limitation: "局限性",
+          novelty: "新颖性",
+          practical_value: "实用价值"
+        }
+        const dimText = dimensions.map((d) => dimensionLabels[d] || d).join("、")
+        const focusText = focus ? `\n特别关注：${focus}` : ""
+
+        // Import getClient lazily to avoid circular dependency
+        const { comparePapersWithLLM } = await import("~utils/llm-client")
+        const result: ComparisonResult = await comparePapersWithLLM(
+          validSnapshots,
+          dimensions,
+          paperSummaries,
+          dimText,
+          focusText
+        )
+
+        return {
+          success: true,
+          data: result,
+          message: `已完成 ${validSnapshots.length} 篇论文的对比分析（维度：${dimText}）`
+        }
+      } catch (e: any) {
+        return { success: false, error: e?.message, message: `对比生成失败：${e?.message ?? String(e)}` }
+      }
+    }
+
+    case "save_comparison": {
+      const title = args.title as string
+      const comparisonJson = args.comparison_json as string
+
+      if (!title?.trim()) {
+        return { success: false, error: "标题为空", message: "保存失败：请提供对比标题" }
+      }
+      if (!comparisonJson?.trim()) {
+        return { success: false, error: "对比数据为空", message: "保存失败：没有可保存的对比数据" }
+      }
+
+      try {
+        const result: ComparisonResult = JSON.parse(comparisonJson)
+        const saved = await saveComparison(title, result)
+        return {
+          success: true,
+          data: { id: saved.id, title: saved.title },
+          message: `已保存对比《${title}》`
+        }
+      } catch (e: any) {
+        return { success: false, error: e?.message, message: `保存对比失败：${e?.message ?? String(e)}` }
+      }
+    }
+
     default:
       return { success: false, error: `未知工具: ${toolName}`, message: `未知工具: ${toolName}` }
   }
 }
-
 export function formatToolResultForLLM(result: ToolResult): string {
   if (result.success) {
     if (typeof result.data === "string") {

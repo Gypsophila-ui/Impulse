@@ -2,7 +2,7 @@
  * Chrome storage utility for persisting configuration and API keys
  */
 
-import type { ChatMessage, ChatSession, Language, PaperMetadata, Theme } from "~types"
+import type { ChatMessage, ChatSession, Language, PaperMetadata, PaperSnapshot, SavedComparison, Theme } from "~types"
 
 export interface LLMConfig {
   provider: "openai"
@@ -38,7 +38,8 @@ const STORAGE_KEYS = {
   CHAT_SESSIONS: "chat_sessions",
   METADATA: "metadata",
   UI_LANGUAGE: "ui_language",
-  UI_THEME: "ui_theme"
+  UI_THEME: "ui_theme",
+  COMPARISONS: "comparisons"
 } as const
 
 export async function saveLLMConfig(config: LLMConfig): Promise<void> {
@@ -339,4 +340,109 @@ export async function getTheme(): Promise<Theme> {
 
 export async function setTheme(theme: Theme): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.UI_THEME]: theme })
+}
+
+// ============= Paper Snapshot (for comparison) =============
+
+/**
+ * Build a PaperSnapshot for a given URL from all stored data.
+ * Returns null if the URL has no meaningful data.
+ */
+export async function getPaperSnapshot(url: string): Promise<PaperSnapshot | null> {
+  const [metadata, notes, highlights, session] = await Promise.all([
+    getMetadataByUrl(url),
+    getNotesByUrl(url),
+    getHighlightsByUrl(url),
+    getChatSessionByUrl(url)
+  ])
+
+  // Must have at least a title or some notes to be a valid candidate
+  if (!metadata?.title && notes.length === 0 && highlights.length === 0) return null
+
+  return {
+    url,
+    title: metadata?.title || url,
+    authors: metadata?.authors || [],
+    year: metadata?.year || "",
+    journal: metadata?.journal || "",
+    doi: metadata?.doi || "",
+    notes: notes.slice(0, 5).map((n) => ({
+      comment: n.comment,
+      selectedText: n.selectedText.slice(0, 200)
+    })),
+    highlights: highlights.slice(0, 10).map((h) => h.phrase),
+    contextPreview: session?.paperContext?.slice(0, 800) || "",
+    lastVisited: session?.timestamp || notes[0]?.timestamp || 0
+  }
+}
+
+/**
+ * Return snapshots of all papers that have been interacted with (have metadata / notes / highlights).
+ * Sorted by most recently visited.
+ */
+export async function listCandidatePapers(): Promise<PaperSnapshot[]> {
+  const [allNotes, allHighlights, allMetadata, allSessions] = await Promise.all([
+    getAllNotes(),
+    getAllHighlights(),
+    chrome.storage.local.get(STORAGE_KEYS.METADATA).then((r) => (r[STORAGE_KEYS.METADATA] || []) as Array<{ url: string; metadata: PaperMetadata; timestamp: number }>),
+    chrome.storage.local.get(STORAGE_KEYS.CHAT_SESSIONS).then((r) => (r[STORAGE_KEYS.CHAT_SESSIONS] || []) as Array<{ url: string; pageTitle: string; timestamp: number; paperContext: string }>)
+  ])
+
+  // Collect all known URLs
+  const urlSet = new Set<string>([
+    ...allNotes.map((n) => n.url),
+    ...allHighlights.map((h) => h.url),
+    ...allMetadata.map((m) => m.url),
+    ...allSessions.map((s) => s.url)
+  ])
+
+  const snapshots = await Promise.all(
+    Array.from(urlSet).map((url) => getPaperSnapshot(url))
+  )
+
+  return snapshots
+    .filter((s): s is PaperSnapshot => s !== null)
+    .sort((a, b) => b.lastVisited - a.lastVisited)
+}
+
+// ============= Saved Comparisons =============
+
+function generateComparisonId(): string {
+  return `cmp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
+export async function getAllComparisons(): Promise<SavedComparison[]> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.COMPARISONS)
+  const comparisons = (result[STORAGE_KEYS.COMPARISONS] || []) as SavedComparison[]
+  return comparisons.sort((a, b) => b.timestamp - a.timestamp)
+}
+
+export async function saveComparison(
+  title: string,
+  result: SavedComparison["result"]
+): Promise<SavedComparison> {
+  const comparisons = await getAllComparisons()
+  const entry: SavedComparison = {
+    id: generateComparisonId(),
+    title,
+    paperUrls: result.papers.map((p) => p.url),
+    paperTitles: result.papers.map((p) => p.title),
+    result,
+    timestamp: Date.now()
+  }
+  comparisons.push(entry)
+  await chrome.storage.local.set({ [STORAGE_KEYS.COMPARISONS]: comparisons })
+  return entry
+}
+
+export async function deleteComparison(id: string): Promise<void> {
+  const comparisons = await getAllComparisons()
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.COMPARISONS]: comparisons.filter((c) => c.id !== id)
+  })
+}
+
+export async function getComparisonById(id: string): Promise<SavedComparison | null> {
+  const comparisons = await getAllComparisons()
+  return comparisons.find((c) => c.id === id) || null
 }

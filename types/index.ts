@@ -117,3 +117,68 @@ export const READING_GOAL_CONFIG: Record<ReadingGoal, { labelKey: string; descri
     descriptionKey: "readingGoal.prepareCitationDesc"
   }
 }
+
+// ─── Paper Comparison Types ────────────────────────────────────────────────
+
+/**
+ * A lightweight snapshot of a paper collected from storage.
+ * Used by list_candidate_papers and get_paper_summary.
+ */
+export interface PaperSnapshot {
+  url: string
+  title: string
+  authors: string[]
+  year: string
+  journal: string
+  doi: string
+  /** User's notes for this paper (max 3, truncated) */
+  notes: Array<{ comment: string; selectedText: string }>
+  /** Key highlight phrases for this paper */
+  highlights: string[]
+  /** First 800 chars of the paper's chat context (abstract / intro) */
+  contextPreview: string
+  lastVisited: number
+}
+
+export type ComparisonDimension =
+  | "contribution"
+  | "method"
+  | "experiment"
+  | "limitation"
+  | "novelty"
+  | "practical_value"
+
+export const COMPARISON_DIMENSION_LABELS: Record<ComparisonDimension, string> = {
+  contribution: "核心贡献",
+  method: "方法",
+  experiment: "实验",
+  limitation: "局限性",
+  novelty: "新颖性",
+  practical_value: "实用价值"
+}
+
+export interface ComparisonRow {
+  dimension: ComparisonDimension | string
+  /** key = paper url, value = summary text for that dimension */
+  values: Record<string, string>
+  /** one-sentence contrast across papers */
+  difference: string
+}
+
+export interface ComparisonResult {
+  papers: PaperSnapshot[]
+  dimensions: Array<ComparisonDimension | string>
+  rows: ComparisonRow[]
+  summary: string
+  recommendation?: string
+  generatedAt: number
+}
+
+export interface SavedComparison {
+  id: string
+  title: string
+  paperUrls: string[]
+  paperTitles: string[]
+  result: ComparisonResult
+  timestamp: number
+}

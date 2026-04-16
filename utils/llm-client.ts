@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
 
-import type { AgentChatResult, AgentStatusCallback, ChatMessage, PaperMetadata, ReadingGoal } from "~types"
+import type { AgentChatResult, AgentStatusCallback, ChatMessage, ComparisonDimension, ComparisonResult, PaperMetadata, PaperSnapshot, ReadingGoal } from "~types"
 import {
   executeToolCall,
   formatToolResultForLLM,
@@ -372,6 +372,24 @@ export async function agentChat(
   向用户提问并获取回答，用于澄清需求、确认操作、获取偏好设置
   使用场景：需要用户做选择、确认操作、提供额外信息时
   示例：ask_user_question("您希望保存为哪种类型的笔记？", [{label: "方法", description: "论文方法相关"}, {label: "结论", description: "论文结论相关"}])
+
+## 论文对比工具
+- **list_candidate_papers**(limit?: number)
+  列出所有可对比的论文候选（有笔记/高亮/元数据的论文），按最近阅读排序
+  使用场景：用户说"帮我对比论文"但未指定论文、或问"我读过哪些论文"
+
+- **get_paper_summary**(url: string)
+  获取指定论文的结构化摘要（元数据、笔记、高亮、上下文预览）
+  使用场景：对比前了解某篇论文的具体内容
+
+- **compare_papers**(paper_urls: string[], dimensions?: string[], focus?: string)
+  对多篇论文进行结构化对比，生成对比表格和总结。对比前需先确认用户选择了哪些论文和维度
+  使用场景：用户说"对比这几篇"、"帮我找出这两篇的异同"、"哪篇方法更好"
+  dimensions 可选：contribution / method / experiment / limitation / novelty / practical_value
+
+- **save_comparison**(title: string, comparison_json: string)
+  将 compare_papers 返回的对比结果保存到本地
+  使用场景：用户说"保存这次对比"，或对比完成后主动询问用户是否保存
 ${summarySection}
 
 # 当前上下文
@@ -592,4 +610,102 @@ export async function compressHistory(
   const summary = response.choices[0]?.message?.content || ""
 
   return { summary, recentMessages }
+}
+
+// ─── Paper Comparison ──────────────────────────────────────────────────────
+
+const DIMENSION_LABELS: Record<string, string> = {
+  contribution: "核心贡献",
+  method: "方法",
+  experiment: "实验",
+  limitation: "局限性",
+  novelty: "新颖性",
+  practical_value: "实用价值"
+}
+
+/**
+ * Call the LLM to generate a structured comparison of multiple papers.
+ * Called from agent-tools.ts case "compare_papers".
+ */
+export async function comparePapersWithLLM(
+  snapshots: PaperSnapshot[],
+  dimensions: Array<ComparisonDimension | string>,
+  paperSummaries: string,
+  dimText: string,
+  focusText: string
+): Promise<ComparisonResult> {
+  const client = await getClient()
+  const config = await getLLMConfig()
+
+  const paperTitles = snapshots.map((s, i) => `论文${i + 1}：${s.title}`).join("\n")
+
+  const prompt = `你是一个学术论文对比分析专家。请仔细阅读以下论文资料，并按要求进行结构化对比分析。
+
+## 待对比论文
+${paperTitles}
+
+## 论文详细资料
+${paperSummaries}
+
+## 对比任务
+对比维度：${dimText}${focusText}
+
+## 输出要求
+请以 JSON 格式返回对比结果，结构如下：
+{
+  "summary": "一段简洁的总体对比摘要（100-150字）",
+  "recommendation": "针对用户关注点的推荐意见（可选，50字以内）",
+  "rows": [
+    {
+      "dimension": "维度英文key，如 contribution/method/experiment/limitation",
+      "values": {
+        "<论文URL1>": "该论文在此维度的核心描述（30-80字）",
+        "<论文URL2>": "该论文在此维度的核心描述（30-80字）"
+      },
+      "difference": "这一维度上各论文的核心差异（30-60字）"
+    }
+  ]
+}
+
+只返回 JSON，不要其他内容。`
+
+  const response = await client.chat.completions.create({
+    model: config?.model || "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.3,
+    max_tokens: 2000
+  })
+
+  const content = response.choices[0]?.message?.content || "{}"
+  const cleaned = content.replace(/```json\n?|\n?```/g, "").trim()
+
+  let parsed: { summary: string; recommendation?: string; rows: Array<{ dimension: string; values: Record<string, string>; difference: string }> }
+
+  try {
+    parsed = JSON.parse(cleaned)
+  } catch {
+    // Fallback: return a minimal structure with the raw text
+    return {
+      papers: snapshots,
+      dimensions,
+      rows: [],
+      summary: content.slice(0, 300),
+      generatedAt: Date.now()
+    }
+  }
+
+  const rows = (parsed.rows || []).map((row) => ({
+    dimension: row.dimension as ComparisonDimension | string,
+    values: row.values || {},
+    difference: row.difference || ""
+  }))
+
+  return {
+    papers: snapshots,
+    dimensions,
+    rows,
+    summary: parsed.summary || "",
+    recommendation: parsed.recommendation,
+    generatedAt: Date.now()
+  }
 }
