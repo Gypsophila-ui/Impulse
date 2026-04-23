@@ -58,3 +58,16 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   handleTab(activeInfo.tabId, tab.url)
 })
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "QUICK_ACTION") {
+    chrome.runtime.sendMessage({
+      type: "QUICK_ACTION_FROM_BG",
+      action: message.action,
+      text: message.text,
+      url: message.url,
+      title: message.title
+    }).catch(() => {})
+  }
+  return false
+})
+

@@ -432,7 +432,7 @@ ${goalPrompt}
   while (currentRound < MAX_TOOL_CALL_ROUNDS) {
     onStatus?.("思考中...", "thinking")
 
-    let response
+    let response: OpenAI.Chat.Completions.ChatCompletion & { _request_id?: string | null }
     try {
       response = await client.chat.completions.create({
         model: config?.model || "gpt-4o-mini",

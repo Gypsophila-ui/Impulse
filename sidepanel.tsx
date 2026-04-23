@@ -307,6 +307,46 @@ export default function Sidepanel() {
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [metadata, notes, highlights, chatMessages, currentTitle])
 
+  useEffect(() => {
+    const handleQuickAction = async (message: any) => {
+      if (message.type !== "QUICK_ACTION_FROM_BG") return
+
+      const { action, text } = message
+      if (!text) return
+
+      setSelectedText(text)
+      setMode("assistant")
+
+      const actions: Record<string, () => void> = {
+        translate: () => {
+          setActiveTab("translation")
+        },
+        summarize: () => {
+          setActiveTab("summary")
+        },
+        explain: () => {
+          setChatInput(`请解释以下术语或概念：${text}`)
+        },
+        highlight: () => {
+          setActiveTab("highlight")
+        },
+        note: () => {
+          setActiveTab("comment")
+          setCommentDraft(text)
+        }
+      }
+
+      if (actions[action]) {
+        actions[action]()
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(handleQuickAction)
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleQuickAction)
+    }
+  }, [])
+
   const canUseSelection = useMemo(() => selectedText.trim().length > 0, [selectedText])
 
   // Dark mode color scheme
