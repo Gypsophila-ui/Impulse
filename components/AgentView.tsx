@@ -24,9 +24,9 @@ const agentStyles = `
     to   { opacity: 1; transform: translateY(0); }
   }
   @keyframes agent-pulse-ring {
-    0%   { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.35); }
-    70%  { box-shadow: 0 0 0 8px rgba(13, 148, 136, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0); }
+    0%   { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.35); }
+    70%  { box-shadow: 0 0 0 8px rgba(249, 115, 22, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
   }
   @keyframes agent-dot-blink {
     0%, 80%, 100% { opacity: 0.15; transform: scaleY(0.6); }
@@ -42,19 +42,19 @@ const agentStyles = `
 
   .agent-root {
     font-family: 'DM Sans', system-ui, sans-serif;
-    --ink: #0f2827;
-    --ink-2: #2d5654;
-    --ink-3: #5fa8a3;
-    --violet: #0d9488;
-    --violet-soft: #ccfbf1;
-    --violet-mid: #5eead4;
+    --ink: #1c0f05;
+    --ink-2: #4a2c0a;
+    --ink-3: #a16207;
+    --violet: #f97316;
+    --violet-soft: #fff7ed;
+    --violet-mid: #fdba74;
     --emerald: #059669;
     --amber: #b45309;
     --red: #dc2626;
-    --surface: #f0fdfa;
+    --surface: #fff7ed;
     --card: #ffffff;
-    --border: #ccfbf1;
-    --border-strong: #5eead4;
+    --border: #fed7aa;
+    --border-strong: #fb923c;
   }
 
   .agent-header {
@@ -67,9 +67,9 @@ const agentStyles = `
   .agent-header-icon {
     width: 32px; height: 32px;
     border-radius: 9px;
-    background: linear-gradient(135deg, #0d9488 0%, #0891b2 100%);
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(13,148,136,0.35);
+    box-shadow: 0 2px 8px rgba(249,115,22,0.35);
     flex-shrink: 0;
   }
   .agent-header-title {
@@ -108,9 +108,9 @@ const agentStyles = `
     overflow: hidden;
   }
   .agent-status-bar.loading {
-    background: linear-gradient(90deg, #f0fdfa 0%, #ccfbf1 100%);
+    background: linear-gradient(90deg, #fff7ed 0%, #ffedd5 100%);
     border-color: var(--violet-mid);
-    color: #0f766e;
+    color: #c2410c;
   }
   .agent-status-bar.error {
     background: #fffbeb;
@@ -130,7 +130,7 @@ const agentStyles = `
   .agent-scan-line {
     position: absolute; top: 0; left: 0;
     width: 25%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(13,148,136,0.12), transparent);
+    background: linear-gradient(90deg, transparent, rgba(249,115,22,0.12), transparent);
     animation: agent-scan 1.8s linear infinite;
   }
   .agent-spin-ring {
@@ -169,17 +169,17 @@ const agentStyles = `
       45deg,
       transparent,
       transparent 8px,
-      rgba(13,148,136,0.025) 8px,
-      rgba(13,148,136,0.025) 9px
+      rgba(249,115,22,0.025) 8px,
+      rgba(249,115,22,0.025) 9px
     );
     animation: agent-fade-up 0.5s ease 0.1s both;
   }
   .agent-empty-icon-wrap {
     width: 52px; height: 52px; border-radius: 16px;
-    background: linear-gradient(135deg, #0d9488 0%, #0891b2 100%);
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
     display: flex; align-items: center; justify-content: center;
     margin-bottom: 14px;
-    box-shadow: 0 4px 16px rgba(13,148,136,0.3);
+    box-shadow: 0 4px 16px rgba(249,115,22,0.3);
     animation: agent-pulse-ring 2.5s ease infinite;
   }
   .agent-empty-title {
@@ -223,10 +223,10 @@ const agentStyles = `
     white-space: pre-wrap;
   }
   .agent-bubble.user {
-    background: linear-gradient(135deg, #0d9488 0%, #0891b2 100%);
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
     color: #fff;
     border-radius: 16px 16px 4px 16px;
-    box-shadow: 0 2px 10px rgba(13,148,136,0.3);
+    box-shadow: 0 2px 10px rgba(249,115,22,0.3);
   }
   .agent-bubble.assistant {
     background: var(--card);
@@ -308,7 +308,7 @@ const agentStyles = `
   }
   .agent-input:focus {
     border-color: var(--violet);
-    box-shadow: 0 0 0 3px rgba(13,148,136,0.12);
+    box-shadow: 0 0 0 3px rgba(249,115,22,0.12);
   }
   .agent-input::placeholder { color: var(--ink-3); }
   .agent-send-btn {
@@ -324,12 +324,12 @@ const agentStyles = `
     white-space: nowrap;
   }
   .agent-send-btn.active {
-    background: linear-gradient(135deg, #0d9488 0%, #0891b2 100%);
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
     color: #fff;
-    box-shadow: 0 2px 10px rgba(13,148,136,0.35);
+    box-shadow: 0 2px 10px rgba(249,115,22,0.35);
   }
   .agent-send-btn.active:hover {
-    box-shadow: 0 4px 16px rgba(13,148,136,0.5);
+    box-shadow: 0 4px 16px rgba(249,115,22,0.5);
     transform: translateY(-1px);
   }
   .agent-send-btn.disabled {
@@ -362,7 +362,7 @@ const agentStyles = `
     background: var(--card);
     border: 1px solid var(--border-strong);
     border-radius: 14px;
-    box-shadow: 0 8px 28px rgba(13,148,136,0.18);
+    box-shadow: 0 8px 28px rgba(249,115,22,0.18);
     z-index: 100;
     overflow: hidden;
     max-height: 280px;
@@ -411,13 +411,13 @@ const agentStyles = `
   /* Markdown in assistant bubbles */
   .agent-md p, .agent-md span[style] { display: block; margin-bottom: 4px; }
   .agent-md code {
-    background: rgba(13,148,136,0.08);
-    border: 1px solid rgba(13,148,136,0.15);
+    background: rgba(249,115,22,0.08);
+    border: 1px solid rgba(249,115,22,0.15);
     border-radius: 4px;
     padding: 1px 5px;
     font-family: 'DM Mono', monospace;
     font-size: 0.88em;
-    color: #0f766e;
+    color: #c2410c;
   }
   .agent-md ul, .agent-md ol { margin: 4px 0; padding-left: 18px; }
   .agent-md li { margin-bottom: 2px; }
@@ -726,7 +726,6 @@ const AgentView: React.FC<AgentViewProps> = ({
           <Zap size={16} color="#fff" />
         </div>
         <span className="agent-header-title">Agent</span>
-        <span className="agent-header-badge">AI · 自主模式</span>
       </div>
 
       <ReadingGoalSelector

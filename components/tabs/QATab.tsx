@@ -106,12 +106,12 @@ const QATab: React.FC<QATabProps> = ({
       <div
         style={{
           padding: 10,
-          background: chatContext ? "#f0fdfa" : "#fef3c7",
-          border: `1px solid ${chatContext ? "#5eead4" : "#fcd34d"}`,
+          background: chatContext ? "#f0f9ff" : "#fef3c7",
+          border: `1px solid ${chatContext ? "#7dd3fc" : "#fcd34d"}`,
           borderRadius: borderRadius.sm,
           marginBottom: 12,
           fontSize: 12,
-          color: chatContext ? "#0f766e" : "#92400e",
+          color: chatContext ? "#0369a1" : "#92400e",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between"
@@ -134,7 +134,7 @@ const QATab: React.FC<QATabProps> = ({
             style={{
               background: "none",
               border: "none",
-              color: "#0d9488",
+              color: "#0ea5e9",
               cursor: "pointer",
               fontSize: 11,
               fontWeight: 600,
@@ -171,7 +171,7 @@ const QATab: React.FC<QATabProps> = ({
               fontSize: 13
             }}
           >
-            <div style={{ fontSize: 32, marginBottom: 8 }}><Bot size={32} color="#0d9488" /></div>
+            <div style={{ fontSize: 32, marginBottom: 8 }}><Bot size={32} color="#0ea5e9" /></div>
             <div>Ask questions about the paper</div>
             <div style={{ fontSize: 11, marginTop: 4 }}>
               Select text, refresh, then start chatting!
@@ -193,7 +193,7 @@ const QATab: React.FC<QATabProps> = ({
                   borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
                   background:
                     msg.role === "user"
-                      ? "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)"
+                      ? "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)"
                       : colors.sectionBg,
                   color: msg.role === "user" ? "#fff" : "#374151",
                   fontSize: 13,
@@ -227,7 +227,7 @@ const QATab: React.FC<QATabProps> = ({
                   width: 14,
                   height: 14,
                   border: "2px solid #d1d5db",
-                  borderTop: "2px solid #0d9488",
+                  borderTop: "2px solid #0ea5e9",
                   borderRadius: borderRadius.full,
                   animation: "spin 0.8s linear infinite"
                 }}
@@ -260,7 +260,7 @@ const QATab: React.FC<QATabProps> = ({
             fontFamily: "inherit",
             transition: "border-color 0.2s ease"
           }}
-          onFocus={(e) => (e.target.style.borderColor = "#0d9488")}
+          onFocus={(e) => (e.target.style.borderColor = "#0ea5e9")}
           onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
         />
         <button
@@ -272,7 +272,7 @@ const QATab: React.FC<QATabProps> = ({
             borderRadius: borderRadius.md,
             background:
               chatInput.trim() && !chatLoading
-                ? "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)"
+                ? "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)"
                 : "#cbd5e1",
             color: "#fff",
             border: "none",

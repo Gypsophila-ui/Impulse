@@ -160,7 +160,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
           transition: "border-color 0.2s ease",
           outline: "none"
         }}
-        onFocus={(e) => (e.target.style.borderColor = "#0d9488")}
+        onFocus={(e) => (e.target.style.borderColor = "#f43f5e")}
         onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
       />
 
@@ -181,7 +181,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
               ((editingNoteId ? true : canUseSelection) &&
                 commentDraft.trim() &&
                 !savingNote)
-                ? "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)"
+                ? "linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)"
                 : "#cbd5e1",
             color: "#fff",
             border: "none",
@@ -330,7 +330,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
               fontSize: 13
             }}
           >
-            <div style={{ fontSize: 32, marginBottom: 8 }}><MessageSquare size={32} color="#0d9488" /></div>
+            <div style={{ fontSize: 32, marginBottom: 8 }}><MessageSquare size={32} color="#f43f5e" /></div>
             <div>No notes yet</div>
             <div style={{ fontSize: 11, marginTop: 4 }}>
               Select text and create your first note!
@@ -349,8 +349,8 @@ const NotesTab: React.FC<NotesTabProps> = ({
                   transition: "all 0.2s ease"
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#0d9488"
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(13, 148, 136, 0.15)"
+                  e.currentTarget.style.borderColor = "#f43f5e"
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(244, 63, 94, 0.15)"
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = "#e5e7eb"
@@ -380,7 +380,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
                         cursor: "pointer",
                         padding: 4,
                         fontSize: 14,
-                        color: "#0d9488"
+                        color: "#f43f5e"
                       }}
                       title="Edit"
                     >
@@ -406,7 +406,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
                   style={{
                     padding: 8,
                     background: "#f9fafb",
-                    borderLeft: "3px solid #0d9488",
+                    borderLeft: "3px solid #f43f5e",
                     borderRadius: 4,
                     marginBottom: 8,
                     fontSize: 12,

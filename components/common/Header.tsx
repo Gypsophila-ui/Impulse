@@ -109,8 +109,9 @@ const Header: React.FC<HeaderProps> = ({
       style={{
         padding: "16px",
         borderBottom: "1px solid #e5e7eb",
+        borderRadius: borderRadius.sm,
         background: isAgentMode
-          ? "linear-gradient(135deg, #0891b2 0%, #0e7490 100%)"
+          ? "linear-gradient(135deg, #f97316 0%, #ea580c 100%)"
           : "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
         color: "#fff",
         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)"
@@ -130,7 +131,7 @@ const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
           <div style={{ color: "rgba(255, 255, 255, 0.9)", fontSize: 12 }}>
-            {isAgentMode ? "AI Agent - 可执行工具操作" : "AI-Powered PDF Assistant"}
+            {isAgentMode ? "AI-Powered PDF Explorer" : "AI-Powered PDF Assistant"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -219,7 +220,7 @@ const Header: React.FC<HeaderProps> = ({
               cursor: "pointer",
               backdropFilter: "blur(10px)"
             }}>
-            {isDark ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#5eead4" />}
+            {isDark ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#c4b5fd" />}
           </button>
         </div>
       </div>
@@ -228,6 +229,14 @@ const Header: React.FC<HeaderProps> = ({
         <div style={{ display: "flex", gap: 4, marginTop: 12 }}>
           {tabKeys.map((tab) => {
             const isActive = activeTab === tab.key
+            const tabColors: Record<string, string> = {
+              summary: "#0d9488",
+              translation: "#10b981",
+              highlight: "#f59e0b",
+              comment: "#f43f5e",
+              qa: "#0ea5e9"
+            }
+            const activeColor = tabColors[tab.key] || "#0d9488"
             return (
               <button
                 key={tab.key}
@@ -241,7 +250,7 @@ const Header: React.FC<HeaderProps> = ({
                   borderRadius: borderRadius.sm,
                   border: "none",
                   background: isActive ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.15)",
-                  color: isActive ? "#0d9488" : "rgba(255, 255, 255, 0.9)",
+                  color: isActive ? activeColor : "rgba(255, 255, 255, 0.9)",
                   cursor: "pointer",
                   backdropFilter: "blur(10px)",
                   boxShadow: isActive ? "0 2px 8px rgba(0, 0, 0, 0.1)" : "none",
