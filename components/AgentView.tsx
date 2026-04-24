@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react"
-import { AlertTriangle, FileText, Sparkles, Zap } from "lucide-react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
+import { AlertTriangle, FileText, Slash, Sparkles, Zap } from "lucide-react"
 import rehypeKatex from "rehype-katex"
 import remarkMath from "remark-math"
 import ReactMarkdown from "react-markdown"
@@ -8,6 +8,7 @@ import "katex/dist/katex.min.css"
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal } from "~types"
 import { type ToolExecutionContext } from "~utils/agent-tools"
 import { borderRadius, shadows, transitions } from "~utils/design-tokens"
+import { searchSkills, type Skill } from "~utils/skills"
 import { agentChat } from "~utils/llm-client"
 import { extractPdfText, isPdfUrl } from "~utils/pdf-extractor"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
@@ -15,28 +16,440 @@ import { deleteChatSession, saveChatSession } from "~utils/storage"
 import Spinner from "./common/Spinner"
 import ReadingGoalSelector from "./common/ReadingGoalSelector"
 
-// Markdown renderer with LaTeX support via react-markdown + remark-math + rehype-katex
+const agentStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+
+  @keyframes agent-fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes agent-pulse-ring {
+    0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.35); }
+    70%  { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+  }
+  @keyframes agent-dot-blink {
+    0%, 80%, 100% { opacity: 0.15; transform: scaleY(0.6); }
+    40%           { opacity: 1;    transform: scaleY(1); }
+  }
+  @keyframes agent-scan {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+  @keyframes agent-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .agent-root {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    --ink: #1a1523;
+    --ink-2: #4a4358;
+    --ink-3: #8b7fa8;
+    --violet: #7c3aed;
+    --violet-soft: #ede9fe;
+    --violet-mid: #c4b5fd;
+    --emerald: #059669;
+    --amber: #b45309;
+    --red: #dc2626;
+    --surface: #faf9fc;
+    --card: #ffffff;
+    --border: #e8e2f3;
+    --border-strong: #c4b5fd;
+  }
+
+  .agent-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    animation: agent-fade-up 0.4s ease both;
+  }
+  .agent-header-icon {
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.35);
+    flex-shrink: 0;
+  }
+  .agent-header-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 17px;
+    color: var(--ink);
+    letter-spacing: -0.3px;
+    line-height: 1;
+  }
+  .agent-header-badge {
+    margin-left: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--violet);
+    background: var(--violet-soft);
+    border: 1px solid var(--violet-mid);
+    border-radius: 4px;
+    padding: 2px 7px;
+  }
+
+  /* Status bar */
+  .agent-status-bar {
+    border-radius: 10px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 13px;
+    border: 1px solid transparent;
+    animation: agent-fade-up 0.4s ease 0.05s both;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-status-bar.loading {
+    background: linear-gradient(90deg, #faf5ff 0%, #f5f3ff 100%);
+    border-color: var(--violet-mid);
+    color: #5b21b6;
+  }
+  .agent-status-bar.error {
+    background: #fffbeb;
+    border-color: #fcd34d;
+    color: var(--amber);
+  }
+  .agent-status-bar.success {
+    background: #f0fdf7;
+    border-color: #6ee7b7;
+    color: #065f46;
+  }
+  .agent-status-bar.warning {
+    background: #fffbeb;
+    border-color: #fcd34d;
+    color: var(--amber);
+  }
+  .agent-scan-line {
+    position: absolute; top: 0; left: 0;
+    width: 25%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(139,92,246,0.12), transparent);
+    animation: agent-scan 1.8s linear infinite;
+  }
+  .agent-spin-ring {
+    width: 13px; height: 13px; flex-shrink: 0; margin-top: 1px;
+    border: 2px solid var(--violet-mid);
+    border-top-color: var(--violet);
+    border-radius: 50%;
+    animation: agent-spin 0.75s linear infinite;
+  }
+
+  /* Chat area */
+  .agent-chat-area {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 160px;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--violet-mid) transparent;
+  }
+  .agent-chat-area::-webkit-scrollbar { width: 4px; }
+  .agent-chat-area::-webkit-scrollbar-track { background: transparent; }
+  .agent-chat-area::-webkit-scrollbar-thumb { background: var(--violet-mid); border-radius: 4px; }
+
+  /* Empty state */
+  .agent-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 32px 20px;
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 14px;
+    background: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 8px,
+      rgba(124,58,237,0.025) 8px,
+      rgba(124,58,237,0.025) 9px
+    );
+    animation: agent-fade-up 0.5s ease 0.1s both;
+  }
+  .agent-empty-icon-wrap {
+    width: 52px; height: 52px; border-radius: 16px;
+    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+    animation: agent-pulse-ring 2.5s ease infinite;
+  }
+  .agent-empty-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 15px;
+    color: var(--ink);
+    margin-bottom: 6px;
+    letter-spacing: -0.2px;
+  }
+  .agent-empty-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+    line-height: 1.55;
+    max-width: 200px;
+  }
+  .agent-empty-hint {
+    margin-top: 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--violet);
+    background: var(--violet-soft);
+    border: 1px solid var(--violet-mid);
+    border-radius: 5px;
+    padding: 3px 9px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Bubbles */
+  .agent-bubble-row {
+    display: flex;
+    animation: agent-fade-up 0.3s ease both;
+  }
+  .agent-bubble-row.user { justify-content: flex-end; }
+  .agent-bubble-row.assistant { justify-content: flex-start; }
+
+  .agent-bubble {
+    max-width: 86%;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .agent-bubble.user {
+    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+    color: #fff;
+    border-radius: 16px 16px 4px 16px;
+    box-shadow: 0 2px 10px rgba(124,58,237,0.3);
+  }
+  .agent-bubble.assistant {
+    background: var(--card);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 4px 16px 16px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+
+  /* Typing indicator */
+  .agent-typing {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px 16px 16px 16px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    font-family: 'DM Mono', monospace;
+    animation: agent-fade-up 0.3s ease both;
+  }
+  .agent-typing-dots {
+    display: flex; gap: 3px; align-items: center;
+  }
+  .agent-typing-dot {
+    width: 4px; height: 14px;
+    background: var(--violet);
+    border-radius: 2px;
+    animation: agent-dot-blink 1.2s ease infinite;
+  }
+  .agent-typing-dot:nth-child(1) { animation-delay: 0s; }
+  .agent-typing-dot:nth-child(2) { animation-delay: 0.18s; }
+  .agent-typing-dot:nth-child(3) { animation-delay: 0.36s; }
+
+  /* Tool calls */
+  .agent-tool-calls {
+    padding: 10px 13px;
+    background: #f0fdf7;
+    border: 1px solid #6ee7b7;
+    border-radius: 10px;
+    font-size: 11px;
+    color: #065f46;
+    animation: agent-fade-up 0.3s ease both;
+  }
+  .agent-tool-calls-title {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    color: #059669;
+  }
+  .agent-tool-call-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 2px 0;
+  }
+  .agent-tool-call-name {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+  }
+
+  /* Input row */
+  .agent-input-row {
+    display: flex; gap: 8px; position: relative;
+    animation: agent-fade-up 0.4s ease 0.15s both;
+  }
+  .agent-input {
+    flex: 1;
+    padding: 11px 14px;
+    font-size: 13px;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    outline: none;
+    background: var(--card);
+    color: var(--ink);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .agent-input:focus {
+    border-color: var(--violet);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+  }
+  .agent-input::placeholder { color: var(--ink-3); }
+  .agent-send-btn {
+    padding: 11px 16px;
+    border-radius: 12px;
+    border: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .agent-send-btn.active {
+    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(124,58,237,0.35);
+  }
+  .agent-send-btn.active:hover {
+    box-shadow: 0 4px 16px rgba(124,58,237,0.5);
+    transform: translateY(-1px);
+  }
+  .agent-send-btn.disabled {
+    background: #e5e7eb;
+    color: #9ca3af;
+    cursor: not-allowed;
+  }
+  .agent-clear-btn {
+    margin-top: 8px;
+    background: none; border: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    color: #ef4444;
+    cursor: pointer;
+    text-align: center;
+    width: 100%;
+    padding: 4px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+    text-transform: uppercase;
+  }
+  .agent-clear-btn:hover { opacity: 1; }
+
+  /* Skill menu */
+  .agent-skill-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0; right: 52px;
+    background: var(--card);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(124,58,237,0.18);
+    z-index: 100;
+    overflow: hidden;
+    max-height: 280px;
+    animation: agent-fade-up 0.2s ease both;
+  }
+  .agent-skill-menu-header {
+    padding: 7px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 5px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .agent-skill-item {
+    padding: 9px 13px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    border-left: 3px solid transparent;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .agent-skill-item:hover, .agent-skill-item.selected {
+    background: var(--violet-soft);
+    border-left-color: var(--violet);
+  }
+  .agent-skill-trigger {
+    font-family: 'DM Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--violet);
+    min-width: 72px;
+  }
+  .agent-skill-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+    min-width: 56px;
+  }
+  .agent-skill-desc {
+    font-size: 11px;
+    color: var(--ink-3);
+    flex: 1;
+  }
+
+  /* Markdown in assistant bubbles */
+  .agent-md p, .agent-md span[style] { display: block; margin-bottom: 4px; }
+  .agent-md code {
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.15);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.88em;
+    color: #5b21b6;
+  }
+  .agent-md ul, .agent-md ol { margin: 4px 0; padding-left: 18px; }
+  .agent-md li { margin-bottom: 2px; }
+  .agent-md h1, .agent-md h2, .agent-md h3 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    margin: 8px 0 3px;
+    color: var(--ink);
+  }
+  .agent-md h1 { font-size: 16px; }
+  .agent-md h2 { font-size: 14px; }
+  .agent-md h3 { font-size: 13px; }
+`
+
 const MdText: React.FC<{ children: string }> = ({ children }) => (
-  <ReactMarkdown
-    remarkPlugins={[remarkMath]}
-    rehypePlugins={[rehypeKatex]}
-    components={{
-      p: ({ children }) => <span style={{ display: "block", marginBottom: 4 }}>{children}</span>,
-      code: ({ children }) => (
-        <code style={{ background: "rgba(0,0,0,0.08)", borderRadius: 3, padding: "1px 4px", fontFamily: "monospace", fontSize: "0.9em" }}>
-          {children}
-        </code>
-      ),
-      ul: ({ children }) => <ul style={{ margin: "4px 0", paddingLeft: 16 }}>{children}</ul>,
-      ol: ({ children }) => <ol style={{ margin: "4px 0", paddingLeft: 16 }}>{children}</ol>,
-      li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
-      h1: ({ children }) => <div style={{ margin: "6px 0 2px", fontWeight: 700, fontSize: 15 }}>{children}</div>,
-      h2: ({ children }) => <div style={{ margin: "6px 0 2px", fontWeight: 700, fontSize: 14 }}>{children}</div>,
-      h3: ({ children }) => <div style={{ margin: "6px 0 2px", fontWeight: 700, fontSize: 13 }}>{children}</div>,
-    }}
-  >
-    {children}
-  </ReactMarkdown>
+  <div className="agent-md">
+    <ReactMarkdown
+      remarkPlugins={[remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        p: ({ children }) => <span style={{ display: "block", marginBottom: 4 }}>{children}</span>,
+        code: ({ children }) => <code>{children}</code>,
+        ul: ({ children }) => <ul>{children}</ul>,
+        ol: ({ children }) => <ol>{children}</ol>,
+        li: ({ children }) => <li>{children}</li>,
+        h1: ({ children }) => <h1>{children}</h1>,
+        h2: ({ children }) => <h2>{children}</h2>,
+        h3: ({ children }) => <h3>{children}</h3>,
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  </div>
 )
 
 interface AgentViewProps {
@@ -104,6 +517,73 @@ const AgentView: React.FC<AgentViewProps> = ({
 }) => {
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // Skill slash-command menu state
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false)
+  const [skillQuery, setSkillQuery] = useState("")
+  const [skillResults, setSkillResults] = useState<Skill[]>([])
+  const [skillIndex, setSkillIndex] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const openSkillMenu = useCallback((query: string) => {
+    const results = searchSkills(query)
+    setSkillResults(results)
+    setSkillIndex(0)
+    setSkillMenuOpen(results.length > 0)
+    setSkillQuery(query)
+  }, [])
+
+  const closeSkillMenu = useCallback(() => {
+    setSkillMenuOpen(false)
+    setSkillQuery("")
+    setSkillResults([])
+    setSkillIndex(0)
+  }, [])
+
+  const applySkill = useCallback((skill: Skill) => {
+    onSetChatInput(skill.prompt)
+    closeSkillMenu()
+    // Focus input after selection
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }, [onSetChatInput, closeSkillMenu])
+
+  const handleInputChange = useCallback((value: string) => {
+    onSetChatInput(value)
+    if (value.startsWith("/")) {
+      openSkillMenu(value.slice(1))
+    } else {
+      closeSkillMenu()
+    }
+  }, [onSetChatInput, openSkillMenu, closeSkillMenu])
+
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (skillMenuOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSkillIndex((i) => Math.min(i + 1, skillResults.length - 1))
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSkillIndex((i) => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === "Enter") {
+        e.preventDefault()
+        if (skillResults[skillIndex]) applySkill(skillResults[skillIndex])
+        return
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        closeSkillMenu()
+        return
+      }
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      void handleSendChat()
+    }
+  }, [skillMenuOpen, skillResults, skillIndex, applySkill, closeSkillMenu])
+
   // PDF auto-extraction state
   const [pdfExtracting, setPdfExtracting] = useState(false)
   const [pdfExtractError, setPdfExtractError] = useState<string | null>(null)
@@ -129,17 +609,24 @@ const AgentView: React.FC<AgentViewProps> = ({
         const result = await extractPdfText(currentUrl)
         if (result.error) {
           setPdfExtractError(result.error)
+          // 即使提取失败，也设置一个空的上下文，避免阻塞渲染
+          onSetChatContext("")
         } else if (result.text) {
           onSetChatContext(result.text)
           setPdfPageCount(result.pageCount)
           setPdfTruncated(result.truncated)
         }
+      } catch (e: any) {
+        // 捕获任何未预期的错误
+        setPdfExtractError(`PDF 提取异常: ${e?.message ?? String(e)}`)
+        onSetChatContext("")
       } finally {
         setPdfExtracting(false)
       }
     }
 
     void run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUrl])
 
   // Sync selectedText as fallback context when no PDF context exists
@@ -221,26 +708,25 @@ const AgentView: React.FC<AgentViewProps> = ({
   }
 
   return (
-    <div style={{ 
+    <div className="agent-root" style={{ 
       padding: 16, 
       overflow: "auto", 
       flex: 1, 
       display: "flex", 
       flexDirection: "column",
-      animation: "fadeIn 0.4s ease"
+      fontFamily: "'DM Sans', system-ui, sans-serif",
+      background: "#faf9fc",
+      color: "#1a1523"
     }}>
-      <div
-        style={{
-          color: colors.headingText,
-          fontWeight: 700,
-          marginBottom: 12,
-          fontSize: 14,
-          display: "flex",
-          alignItems: "center",
-          gap: 8
-        }}>
-        <Zap size={20} color="#8b5cf6" />
-        <span>Agent Mode</span>
+      <style>{agentStyles}</style>
+
+      {/* Header */}
+      <div className="agent-header">
+        <div className="agent-header-icon">
+          <Zap size={16} color="#fff" />
+        </div>
+        <span className="agent-header-title">Agent</span>
+        <span className="agent-header-badge">AI · 自主模式</span>
       </div>
 
       <ReadingGoalSelector
@@ -249,87 +735,91 @@ const AgentView: React.FC<AgentViewProps> = ({
         colors={colors}
       />
 
-      {/* PDF / Context status bar */}
+      {/* Context status bar */}
       {pdfExtracting ? (
-        <div
-          style={{
-            padding: "10px 12px",
-            background: "#f5f3ff",
-            border: "1px solid #c4b5fd",
-            borderRadius: borderRadius.sm,
-            marginBottom: 12,
-            fontSize: 12,
-            color: "#5b21b6",
-            display: "flex",
-            alignItems: "center",
-            gap: 8
-          }}
-        >
-          <div
-            style={{
-              width: 12,
-              height: 12,
-              border: "2px solid #c4b5fd",
-              borderTop: "2px solid #8b5cf6",
-              borderRadius: borderRadius.full,
-              animation: "spin 0.8s linear infinite",
-              flexShrink: 0
-            }}
-          />
-          正在提取 PDF 全文...
+        <div className="agent-status-bar loading">
+          <div className="agent-scan-line" />
+          <div className="agent-spin-ring" />
+          <span>正在提取 PDF 全文...</span>
         </div>
       ) : pdfExtractError ? (
-        <div
-          style={{
-            padding: "10px 12px",
-            background: "#fef3c7",
-            border: "1px solid #fcd34d",
-            borderRadius: borderRadius.sm,
-            marginBottom: 12,
-            fontSize: 12,
-            color: "#92400e",
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 6
-          }}
-        >
+        <div className="agent-status-bar error">
           <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600, marginBottom: 2 }}>{pdfExtractError}</div>
-            <div style={{ opacity: 0.8 }}>请在 PDF 中选中文字后，它会自动作为上下文</div>
+            <div style={{ opacity: 0.75, marginBottom: 8 }}>请在 PDF 中选中文字后，它会自动作为上下文</div>
+            {currentUrl?.startsWith('file://') && (
+              <div style={{ marginTop: 6 }}>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    try {
+                      setPdfExtracting(true)
+                      setPdfExtractError(null)
+                      const arrayBuffer = await file.arrayBuffer()
+                      const result = await processPdfBuffer(arrayBuffer)
+                      if (result.error) {
+                        setPdfExtractError(result.error)
+                        onSetChatContext("")
+                      } else {
+                        onSetChatContext(result.text)
+                        setPdfPageCount(result.pageCount)
+                        setPdfTruncated(result.truncated)
+                        onShowMessage(<><Sparkles size={14} style={{ marginRight: 4 }} /> PDF 上传成功</>, "success")
+                        setTimeout(() => onClearMessage(), 2000)
+                      }
+                    } catch (err: any) {
+                      setPdfExtractError(`文件读取失败: ${err?.message ?? String(err)}`)
+                      onSetChatContext("")
+                    } finally {
+                      setPdfExtracting(false)
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                  id="pdf-upload-input"
+                />
+                <label
+                  htmlFor="pdf-upload-input"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '4px 10px',
+                    background: '#fef3c7',
+                    border: '1px solid #f59e0b',
+                    borderRadius: 6,
+                    color: '#92400e',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <FileText size={12} />
+                  上传本地 PDF 文件
+                </label>
+              </div>
+            )}
           </div>
         </div>
       ) : chatContext ? (
-        <div
-          style={{
-            padding: "10px 12px",
-            background: "#f0fdf4",
-            border: "1px solid #86efac",
-            borderRadius: borderRadius.sm,
-            marginBottom: 12,
-            fontSize: 12,
-            color: "#166534",
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 8
-          }}
-        >
-          <span style={{ display: "flex", alignItems: "flex-start", gap: 4, flex: 1, minWidth: 0 }}>
+        <div className="agent-status-bar success" style={{ justifyContent: "space-between" }}>
+          <span style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: 1, minWidth: 0 }}>
             <FileText size={13} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
               {isPdfUrl(currentUrl) && pdfPageCount !== null ? (
                 <>
                   <span style={{ fontWeight: 600 }}>已加载 PDF 全文</span>
-                  {" · "}
-                  {pdfPageCount} 页
+                  {" · "}{pdfPageCount} 页
                   {pdfTruncated && " · 已截取前 60k 字符"}
                 </>
               ) : (
                 <>
                   <span style={{ fontWeight: 600 }}>已设置上下文</span>
-                  {" · "}
-                  {chatContext.slice(0, 50)}{chatContext.length > 50 ? "..." : ""}
+                  {" · "}{chatContext.slice(0, 50)}{chatContext.length > 50 ? "…" : ""}
                 </>
               )}
             </span>
@@ -338,227 +828,116 @@ const AgentView: React.FC<AgentViewProps> = ({
             <button
               onClick={() => {
                 onSetChatContext(selectedText)
-                onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> 上下文已更新</>, "success")
+                onShowMessage(<><Sparkles size={14} style={{ marginRight: 4 }} /> 上下文已更新</>, "success")
                 setTimeout(() => onClearMessage(), 2000)
               }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#16a34a",
-                cursor: "pointer",
-                fontSize: 11,
-                fontWeight: 600,
-                padding: "2px 4px",
-                whiteSpace: "nowrap",
-                flexShrink: 0
-              }}
+              style={{ background: "none", border: "none", color: "#059669", cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "2px 4px", whiteSpace: "nowrap", flexShrink: 0 }}
             >
               更新
             </button>
           )}
         </div>
       ) : (
-        <div
-          style={{
-            padding: "10px 12px",
-            background: "#fef3c7",
-            border: "1px solid #fcd34d",
-            borderRadius: borderRadius.sm,
-            marginBottom: 12,
-            fontSize: 12,
-            color: "#92400e",
-            display: "flex",
-            alignItems: "center",
-            gap: 6
-          }}
-        >
+        <div className="agent-status-bar warning">
           <AlertTriangle size={13} style={{ flexShrink: 0 }} />
           <span>请在 PDF 中选中一段文字，Agent 将以此作为上下文</span>
         </div>
       )}
 
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          marginBottom: 12,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          minHeight: 200
-        }}
-      >
+      {/* Chat messages */}
+      <div className="agent-chat-area">
         {chatMessages.length === 0 ? (
-          <div
-            style={{
-              padding: 20,
-              border: `2px dashed ${colors.border}`,
-              borderRadius: borderRadius.md,
-              textAlign: "center",
-              color: "#9ca3af",
-              fontSize: 13
-            }}
-          >
-            <div style={{ fontSize: 32, marginBottom: 8 }}><Zap size={32} color="#8b5cf6" /></div>
-            <div style={{ fontWeight: 600, color: "#6b7280", marginBottom: 4 }}>Agent Mode</div>
-            <div>AI 可以帮你执行复杂任务</div>
-            <div style={{ fontSize: 11, marginTop: 4, color: "#9ca3af" }}>
-              例如：高亮这段话、添加笔记、搜索相关内容...
+          <div className="agent-empty">
+            <div className="agent-empty-icon-wrap">
+              <Zap size={22} color="#fff" />
             </div>
+            <div className="agent-empty-title">准备就绪</div>
+            <div className="agent-empty-sub">AI 可以帮你执行复杂任务，理解论文，提取关键信息</div>
+            <div className="agent-empty-hint">输入 / 触发技能命令</div>
           </div>
         ) : (
           chatMessages.map((msg, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: "flex",
-                justifyContent: msg.role === "user" ? "flex-end" : "flex-start"
-              }}
-            >
-              <div
-                style={{
-                  maxWidth: "85%",
-                  padding: "10px 14px",
-                  borderRadius: msg.role === "user" ? borderRadius.bubble.user : borderRadius.bubble.assistant,
-                  background:
-                    msg.role === "user"
-                      ? "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)"
-                      : colors.sectionBg,
-                  color: msg.role === "user" ? "#fff" : "#374151",
-                  fontSize: 13,
-                  lineHeight: "20px",
-                  whiteSpace: "pre-wrap",
-                  boxShadow: shadows.sm
-                }}
-              >
-                {msg.role === "assistant" ? (
-                  <MdText>{msg.content}</MdText>
-                ) : (
-                  msg.content
-                )}
+            <div key={idx} className={`agent-bubble-row ${msg.role}`} style={{ animationDelay: `${idx * 0.04}s` }}>
+              <div className={`agent-bubble ${msg.role}`}>
+                {msg.role === "assistant" ? <MdText>{msg.content}</MdText> : msg.content}
               </div>
             </div>
           ))
         )}
+
         {chatLoading && (
-          <div style={{ display: "flex", justifyContent: "flex-start" }}>
-            <div
-              style={{
-                padding: "10px 14px",
-                borderRadius: borderRadius.bubble.assistant,
-                background: colors.sectionBg,
-                color: "#6b7280",
-                fontSize: 13,
-                display: "flex",
-                alignItems: "center",
-                gap: 8
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-block",
-                  width: 14,
-                  height: 14,
-                  border: "2px solid #c4b5fd",
-                  borderTop: "2px solid #8b5cf6",
-                  borderRadius: borderRadius.full,
-                  animation: "spin 0.8s linear infinite"
-                }}
-              />
-              {agentStatus || "Thinking..."}
+          <div className="agent-bubble-row assistant">
+            <div className="agent-typing">
+              <div className="agent-typing-dots">
+                <div className="agent-typing-dot" />
+                <div className="agent-typing-dot" />
+                <div className="agent-typing-dot" />
+              </div>
+              <span>{agentStatus || "思考中..."}</span>
             </div>
           </div>
         )}
+
         {lastToolCalls.length > 0 && !chatLoading && (
-          <div
-            style={{
-              padding: "8px 12px",
-              background: "#f0fdf4",
-              border: "1px solid #86efac",
-              borderRadius: borderRadius.sm,
-              fontSize: 11,
-              color: "#166534"
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>已执行工具：</div>
+          <div className="agent-tool-calls">
+            <div className="agent-tool-calls-title">已执行工具</div>
             {lastToolCalls.map((tc, idx) => (
-              <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                <span style={{ color: tc.result.success ? "#22c55e" : "#ef4444" }}>
+              <div key={idx} className="agent-tool-call-item">
+                <span style={{ color: tc.result.success ? "#059669" : "#dc2626", fontSize: 12 }}>
                   {tc.result.success ? "✓" : "✗"}
                 </span>
-                <span style={{ fontWeight: 500 }}>{tc.name}</span>
-                <span style={{ color: "#6b7280" }}>- {tc.result.message}</span>
+                <span className="agent-tool-call-name">{tc.name}</span>
+                <span style={{ color: "#6b7280" }}>— {tc.result.message}</span>
               </div>
             ))}
           </div>
         )}
+
         <div ref={chatEndRef} />
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
+      {/* Input row */}
+      <div className="agent-input-row">
+        {skillMenuOpen && (
+          <div className="agent-skill-menu">
+            <div className="agent-skill-menu-header">
+              <Slash size={10} />
+              <span>技能命令 · ↑↓ 导航 · Enter 选择 · Esc 关闭</span>
+            </div>
+            {skillResults.map((skill, i) => (
+              <div
+                key={skill.trigger}
+                className={`agent-skill-item${i === skillIndex ? " selected" : ""}`}
+                onMouseDown={(e) => { e.preventDefault(); applySkill(skill) }}
+                onMouseEnter={() => setSkillIndex(i)}
+              >
+                <span className="agent-skill-trigger">/{skill.trigger}</span>
+                <span className="agent-skill-label">{skill.label}</span>
+                <span className="agent-skill-desc">{skill.description}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <input
+          ref={inputRef}
+          className="agent-input"
           value={chatInput}
-          onChange={(e) => onSetChatInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              void handleSendChat()
-            }
-          }}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onKeyDown={handleInputKeyDown}
           placeholder="让 Agent 帮你完成任务..."
-          style={{
-            flex: 1,
-            padding: "10px 14px",
-            fontSize: 13,
-            border: `2px solid ${colors.border}`,
-            borderRadius: borderRadius.md,
-            outline: "none",
-            fontFamily: "inherit",
-            background: colors.inputBg,
-            color: colors.text,
-            transition: transitions.normal
-          }}
-          onFocus={(e) => (e.target.style.borderColor = "#8b5cf6")}
-          onBlur={(e) => (e.target.style.borderColor = colors.border)}
         />
         <button
+          className={`agent-send-btn ${chatInput.trim() && !chatLoading ? "active" : "disabled"}`}
           onClick={() => void handleSendChat()}
           disabled={!chatInput.trim() || chatLoading}
-          className="btn-hover"
-          style={{
-            padding: "10px 16px",
-            borderRadius: borderRadius.md,
-            background:
-              chatInput.trim() && !chatLoading
-                ? "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)"
-                : "#cbd5e1",
-            color: "#fff",
-            border: "none",
-            cursor: chatInput.trim() && !chatLoading ? "pointer" : "not-allowed",
-            fontWeight: 600,
-            fontSize: 13
-          }}
         >
-          {chatLoading ? <Spinner /> : "Send"}
+          {chatLoading ? <Spinner /> : "发送"}
         </button>
       </div>
 
       {chatMessages.length > 0 && (
-        <button
-          onClick={handleClearChat}
-          style={{
-            marginTop: 10,
-            background: "none",
-            border: "none",
-            color: "#ef4444",
-            cursor: "pointer",
-            fontSize: 11,
-            fontWeight: 600,
-            padding: 4,
-            textAlign: "center"
-          }}
-        >
-          Clear Chat History
+        <button className="agent-clear-btn" onClick={handleClearChat}>
+          清除对话记录
         </button>
       )}
     </div>

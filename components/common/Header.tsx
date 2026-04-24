@@ -109,9 +109,9 @@ const Header: React.FC<HeaderProps> = ({
       style={{
         padding: "16px",
         borderBottom: "1px solid #e5e7eb",
-        background: isAgentMode 
-          ? "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)"
-          : "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+        background: isAgentMode
+          ? "linear-gradient(135deg, #0891b2 0%, #0e7490 100%)"
+          : "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
         color: "#fff",
         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)"
       }}>
@@ -241,7 +241,7 @@ const Header: React.FC<HeaderProps> = ({
                   borderRadius: borderRadius.sm,
                   border: "none",
                   background: isActive ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.15)",
-                  color: isActive ? "#3b82f6" : "rgba(255, 255, 255, 0.9)",
+                  color: isActive ? "#0d9488" : "rgba(255, 255, 255, 0.9)",
                   cursor: "pointer",
                   backdropFilter: "blur(10px)",
                   boxShadow: isActive ? "0 2px 8px rgba(0, 0, 0, 0.1)" : "none",

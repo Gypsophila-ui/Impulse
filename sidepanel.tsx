@@ -351,13 +351,13 @@ export default function Sidepanel() {
 
   // Dark mode color scheme
   const colors = {
-    bg: isDark ? "#1a1a2e" : "#f9fafb",
-    cardBg: isDark ? "#2d2d44" : "#fff",
+    bg: isDark ? "#0d1f1e" : "#f9fafb",
+    cardBg: isDark ? "#162e2c" : "#fff",
     text: isDark ? "#e5e5e5" : "#374151",
-    textSecondary: isDark ? "#a0a0b8" : "#6b7280",
-    border: isDark ? "#3d3d5c" : "#e5e7eb",
-    inputBg: isDark ? "#2d2d44" : "#fff",
-    sectionBg: isDark ? "#252540" : "#f9fafb",
+    textSecondary: isDark ? "#6fb5b0" : "#6b7280",
+    border: isDark ? "#1e3d3b" : "#e5e7eb",
+    inputBg: isDark ? "#162e2c" : "#fff",
+    sectionBg: isDark ? "#112120" : "#f9fafb",
     headingText: isDark ? "#f0f0f0" : "#111827"
   }
 
