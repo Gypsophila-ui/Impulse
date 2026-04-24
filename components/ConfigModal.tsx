@@ -78,7 +78,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
       >
         <div
           style={{
-            background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+            background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
             padding: "16px 20px",
             color: "#fff",
             display: "flex",
@@ -118,7 +118,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   fontFamily: "monospace",
                   outline: "none"
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+                onFocus={(e) => (e.target.style.borderColor = "#0d9488")}
                 onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
               />
               <button
@@ -155,10 +155,10 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                       padding: "6px 12px",
                       fontSize: 12,
                       fontWeight: 600,
-                      border: isActive ? "2px solid #3b82f6" : "2px solid #e5e7eb",
+                      border: isActive ? "2px solid #0d9488" : "2px solid #e5e7eb",
                       borderRadius: borderRadius.xs,
-                      background: isActive ? "#eff6ff" : "#fff",
-                      color: isActive ? "#3b82f6" : "#374151",
+                      background: isActive ? "#f0fdfa" : "#fff",
+                      color: isActive ? "#0d9488" : "#374151",
                       cursor: "pointer"
                     }}
                   >
@@ -184,7 +184,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   fontFamily: "monospace",
                   outline: "none"
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+                onFocus={(e) => (e.target.style.borderColor = "#0d9488")}
                 onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
               />
             )}
@@ -229,7 +229,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                   fontFamily: "monospace",
                   outline: "none"
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+                onFocus={(e) => (e.target.style.borderColor = "#0d9488")}
                 onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
               />
             )}
@@ -271,7 +271,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                 padding: "10px 16px",
                 fontSize: 13,
                 fontWeight: 600,
-                background: configSaving || !configApiKey.trim() ? "#cbd5e1" : "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+                background: configSaving || !configApiKey.trim() ? "#cbd5e1" : "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
                 color: "#fff",
                 border: "none",
                 borderRadius: borderRadius.sm,

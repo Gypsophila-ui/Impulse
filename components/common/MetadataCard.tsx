@@ -111,9 +111,9 @@ const MetadataCard: React.FC<MetadataCardProps> = ({
                 marginTop: 6,
                 padding: "4px 10px",
                 fontSize: 11,
-                background: "#eff6ff",
-                color: "#3b82f6",
-                border: "1px solid #bfdbfe",
+                background: "#f0fdfa",
+                color: "#0d9488",
+                border: "1px solid #5eead4",
                 borderRadius: borderRadius.xs,
                 cursor: "pointer",
                 fontWeight: 600
@@ -142,7 +142,7 @@ const MetadataCard: React.FC<MetadataCardProps> = ({
         fontWeight: 600,
         marginBottom: 4
       }}>
-      {extractingMetadata ? "Extracting..." : (<><FileText size={14} style={{ marginRight: 4, color: "#3b82f6" }} /> Extract Paper Metadata</>)}
+      {extractingMetadata ? "Extracting..." : (<><FileText size={14} style={{ marginRight: 4, color: "#0d9488" }} /> Extract Paper Metadata</>)}
     </button>
   )
 }

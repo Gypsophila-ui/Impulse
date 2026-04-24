@@ -101,7 +101,7 @@ const ContentArea: React.FC<ContentAreaProps> = ({
             transition: "border-color 0.2s ease",
             outline: "none"
           }}
-          onFocus={(e) => (e.target.style.borderColor = "#3b82f6")}
+          onFocus={(e) => (e.target.style.borderColor = "#0d9488")}
           onBlur={(e) => (e.target.style.borderColor = colors.border)}
         />
         {selectedText && (

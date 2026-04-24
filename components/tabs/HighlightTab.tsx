@@ -248,7 +248,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
                 style={{
                   background: "none",
                   border: "none",
-                  color: "#3b82f6",
+                  color: "#0d9488",
                   cursor: applyingHighlights ? "not-allowed" : "pointer",
                   fontSize: 11,
                   fontWeight: 600,

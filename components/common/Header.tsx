@@ -219,7 +219,7 @@ const Header: React.FC<HeaderProps> = ({
               cursor: "pointer",
               backdropFilter: "blur(10px)"
             }}>
-            {isDark ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#a5b4fc" />}
+            {isDark ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#5eead4" />}
           </button>
         </div>
       </div>

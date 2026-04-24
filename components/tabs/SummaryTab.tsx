@@ -75,7 +75,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
           borderRadius: borderRadius.md,
           background:
             canUseSelection && !loading
-              ? "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"
+              ? "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)"
               : "#cbd5e1",
           color: "#fff",
           border: "none",
@@ -87,7 +87,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
           justifyContent: "center",
           gap: 8,
           boxShadow:
-            canUseSelection && !loading ? "0 4px 12px rgba(59, 130, 246, 0.4)" : "none"
+            canUseSelection && !loading ? "0 4px 12px rgba(13, 148, 136, 0.4)" : "none"
         }}
       >
         {loading ? (

@@ -27,8 +27,8 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
     text: isDark ? "#f3f4f6" : "#1f2937",
     textSecondary: isDark ? "#9ca3af" : "#6b7280",
     border: isDark ? "#374151" : "#e5e7eb",
-    accent: "#3b82f6",
-    accentHover: "#2563eb",
+    accent: "#0d9488",
+    accentHover: "#0f766e",
     cardBg: isDark ? "#374151" : "#f9fafb"
   }
 
@@ -172,15 +172,15 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
               borderRadius: borderRadius.md,
               border: `2px solid ${
                 showCustomInput
-                  ? "#8b5cf6"
+                  ? "#0891b2"
                   : hoveredOption === "__custom__"
-                    ? "#8b5cf6"
+                    ? "#0891b2"
                     : colors.border
               }`,
               background: showCustomInput
-                ? "rgba(139, 92, 246, 0.1)"
+                ? "rgba(8, 145, 178, 0.1)"
                 : hoveredOption === "__custom__"
-                  ? "rgba(139, 92, 246, 0.05)"
+                  ? "rgba(8, 145, 178, 0.05)"
                   : colors.cardBg,
               cursor: "pointer",
               textAlign: "left",
@@ -188,12 +188,12 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <MessageSquare size={16} color={showCustomInput ? "#8b5cf6" : colors.textSecondary} />
+              <MessageSquare size={16} color={showCustomInput ? "#0891b2" : colors.textSecondary} />
               <span
                 style={{
                   fontSize: 14,
                   fontWeight: 600,
-                  color: showCustomInput ? "#8b5cf6" : colors.text
+                  color: showCustomInput ? "#0891b2" : colors.text
                 }}
               >
                 Chat with Agent
@@ -222,7 +222,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
                 width: "100%",
                 padding: "12px 16px",
                 borderRadius: borderRadius.md,
-                border: `2px solid ${customInput ? "#8b5cf6" : colors.border}`,
+                border: `2px solid ${customInput ? "#0891b2" : colors.border}`,
                 background: colors.cardBg,
                 color: colors.text,
                 fontSize: 14,
@@ -264,7 +264,7 @@ const AskUserQuestionModal: React.FC<AskUserQuestionModalProps> = ({
               border: "none",
               background: canSubmit
                 ? showCustomInput
-                  ? "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)"
+                  ? "linear-gradient(135deg, #0891b2 0%, #0d9488 100%)"
                   : `linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentHover} 100%)`
                 : colors.border,
               color: "#fff",
