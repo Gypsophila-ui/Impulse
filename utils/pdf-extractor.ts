@@ -32,19 +32,83 @@ const MAX_CHARS = 60_000
  */
 export async function extractPdfText(url: string): Promise<PdfExtractResult> {
   try {
-    // Fetch the raw PDF bytes
-    const response = await fetch(url)
-    if (!response.ok) {
+    // 处理不同类型的 PDF URL
+    let arrayBuffer: ArrayBuffer
+    
+    // 1. 处理本地文件 PDF (file:// 协议)
+    if (url.startsWith('file://')) {
+      // 本地文件由于浏览器安全限制无法直接读取
+      // 建议用户使用以下替代方案：
+      // 1. 将 PDF 上传到临时服务器
+      // 2. 使用在线 PDF 查看器
+      // 3. 手动复制 PDF 内容
       return {
         text: "",
         pageCount: 0,
         truncated: false,
-        error: `Failed to fetch PDF: ${response.status} ${response.statusText}`
+        error: "浏览器安全限制：无法直接读取本地 PDF 文件。建议：1) 使用在线 PDF 链接 2) 手动复制内容到聊天框"
       }
     }
+    
+    // 2. 处理 arXiv PDF 链接
+    let fetchUrl = url
+    if (url.includes('arxiv.org/pdf/')) {
+      // arXiv PDF 链接通常可以直接访问
+      fetchUrl = url.replace('/pdf/', '/pdf/').split('v')[0] + '.pdf'
+    }
+    
+    // 3. 尝试多种获取策略
+    let response: Response
+    let fetchError: Error | null = null
+    
+    // 策略1: 直接 fetch
+    try {
+      response = await fetch(fetchUrl)
+      if (response.ok) {
+        arrayBuffer = await response.arrayBuffer()
+        return await processPdfBuffer(arrayBuffer)
+      }
+    } catch (e) {
+      fetchError = e as Error
+    }
+    
+    // 策略2: 使用 CORS 模式
+    try {
+      response = await fetch(fetchUrl, {
+        mode: 'cors',
+        credentials: 'omit'
+      })
+      if (response.ok) {
+        arrayBuffer = await response.arrayBuffer()
+        return await processPdfBuffer(arrayBuffer)
+      }
+    } catch (e) {
+      fetchError = e as Error
+    }
+    
+    // 所有策略都失败
+    return {
+      text: "",
+      pageCount: 0,
+      truncated: false,
+      error: `无法获取 PDF: ${fetchError?.message || '网络请求失败'}`
+    }
+  } catch (e: any) {
+    // 捕获任何未预期的错误
+    const msg = e?.message ?? String(e)
+    return {
+      text: "",
+      pageCount: 0,
+      truncated: false,
+      error: msg.includes("password")
+        ? "PDF 受密码保护，无法提取文本"
+        : `PDF 处理失败: ${msg}`
+    }
+  }
+}
 
-    const arrayBuffer = await response.arrayBuffer()
-
+async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExtractResult> {
+  try {
     // Load the PDF document
     const loadingTask = pdfjs.getDocument({
       data: arrayBuffer,

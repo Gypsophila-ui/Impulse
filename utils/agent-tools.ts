@@ -313,7 +313,12 @@ async function applyHighlightsToPage(
     })
     return response
   } catch (e: any) {
-    return { success: false, count: 0, error: e?.message ?? String(e) }
+    // 处理 "Could not establish connection" 错误
+    const errorMsg = e?.message ?? String(e)
+    if (errorMsg.includes("Could not establish connection") || errorMsg.includes("Receiving end does not exist")) {
+      return { success: false, count: 0, error: "内容脚本尚未加载完成，请稍后重试" }
+    }
+    return { success: false, count: 0, error: errorMsg }
   }
 }
 

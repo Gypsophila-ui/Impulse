@@ -104,8 +104,8 @@ const createToolbar = (): HTMLElement => {
 
     btn.addEventListener("mouseenter", () => {
       Object.assign(btn.style, {
-        background: "#f3f4f6",
-        color: "#8b5cf6"
+        background: "#f0fdfa",
+        color: "#0d9488"
       })
     })
 
@@ -227,17 +227,13 @@ const scheduleHide = () => {
 const handleActionClick = (actionId: string) => {
   if (!currentSelection || !isExtensionContextValid()) return
 
-  try {
-    chrome.runtime.sendMessage({
-      type: "QUICK_ACTION",
-      action: actionId,
-      text: currentSelection,
-      url: window.location.href,
-      title: document.title
-    })
-  } catch {
-    // Extension context may be invalidated
-  }
+  chrome.runtime.sendMessage({
+    type: "QUICK_ACTION",
+    action: actionId,
+    text: currentSelection,
+    url: window.location.href,
+    title: document.title
+  }).catch(() => {})
 
   hideToolbar()
 }
@@ -306,7 +302,7 @@ style.textContent = `
 
   @media (prefers-color-scheme: dark) {
     #${QUICK_ACTIONS_ID} {
-      background: linear-gradient(135deg, #2d2d44 0%, #1a1a2e 100%) !important;
+      background: linear-gradient(135deg, #0d1f1e 0%, #112120 100%) !important;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
     }
 
@@ -315,8 +311,8 @@ style.textContent = `
     }
 
     .impulse-action-btn:hover {
-      background: #3d3d5c !important;
-      color: #a78bfa !important;
+      background: #1e3d3b !important;
+      color: #5eead4 !important;
     }
   }
 `
