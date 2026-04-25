@@ -349,16 +349,16 @@ export default function Sidepanel() {
 
   const canUseSelection = useMemo(() => selectedText.trim().length > 0, [selectedText])
 
-  // Dark mode color scheme
+  // Mint green color scheme for assistant mode
   const colors = {
-    bg: isDark ? "#0d1f1e" : "#f9fafb",
-    cardBg: isDark ? "#162e2c" : "#fff",
-    text: isDark ? "#e5e5e5" : "#374151",
-    textSecondary: isDark ? "#6fb5b0" : "#6b7280",
-    border: isDark ? "#1e3d3b" : "#e5e7eb",
-    inputBg: isDark ? "#162e2c" : "#fff",
-    sectionBg: isDark ? "#112120" : "#f9fafb",
-    headingText: isDark ? "#f0f0f0" : "#111827"
+    bg: isDark ? "#0a1f1a" : "#f0faf8",
+    cardBg: isDark ? "#132a24" : "#fefffe",
+    text: isDark ? "#d4e8e3" : "#2d4a47",
+    textSecondary: isDark ? "#7ab5ad" : "#5a8a84",
+    border: isDark ? "#1e3d36" : "#c5e0db",
+    inputBg: isDark ? "#132a24" : "#fefffe",
+    sectionBg: isDark ? "#0d1f1a" : "#e8f5f3",
+    headingText: isDark ? "#e8f5f3" : "#1a3a36"
   }
 
   return (
