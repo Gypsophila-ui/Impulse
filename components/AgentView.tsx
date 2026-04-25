@@ -10,7 +10,7 @@ import { type ToolExecutionContext } from "~utils/agent-tools"
 import { borderRadius, shadows, transitions } from "~utils/design-tokens"
 import { searchSkills, type Skill } from "~utils/skills"
 import { agentChat } from "~utils/llm-client"
-import { extractPdfText, isPdfUrl } from "~utils/pdf-extractor"
+import { extractPdfText, isPdfUrl, processPdfBuffer } from "~utils/pdf-extractor"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
 
 import Spinner from "./common/Spinner"

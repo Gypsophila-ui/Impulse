@@ -3,15 +3,11 @@
  * Runs in the sidepanel (full browser page context, not service worker)
  */
 import * as pdfjs from "pdfjs-dist"
-import { WorkerMessageHandler } from "pdfjs-dist/build/pdf.worker.min.mjs"
 
-// Run PDF.js in the main thread by injecting the worker handler directly.
-// This avoids any worker URL resolution issues in Parcel/Plasmo's bundler.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-;(pdfjs.GlobalWorkerOptions as any).workerPort = null
-// Tell PDF.js to use the already-imported WorkerMessageHandler as the fake worker
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-;(globalThis as any).pdfjsWorker = { WorkerMessageHandler }
+// Disable the worker entirely — run PDF.js in the main thread.
+// In a Chrome Extension sidepanel, worker URLs are hard to resolve correctly,
+// and the main-thread fallback is reliable for our use case.
+pdfjs.GlobalWorkerOptions.workerSrc = ""
 
 export interface PdfExtractResult {
   text: string
@@ -50,11 +46,10 @@ export async function extractPdfText(url: string): Promise<PdfExtractResult> {
       }
     }
     
-    // 2. 处理 arXiv PDF 链接
+    // 2. 处理 arXiv PDF 链接 — 去掉版本号后缀 (e.g. 2301.12345v2 → 2301.12345.pdf)
     let fetchUrl = url
     if (url.includes('arxiv.org/pdf/')) {
-      // arXiv PDF 链接通常可以直接访问
-      fetchUrl = url.replace('/pdf/', '/pdf/').split('v')[0] + '.pdf'
+      fetchUrl = url.replace(/v\d+$/, '') + '.pdf'
     }
     
     // 3. 尝试多种获取策略
@@ -107,7 +102,7 @@ export async function extractPdfText(url: string): Promise<PdfExtractResult> {
   }
 }
 
-async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExtractResult> {
+export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExtractResult> {
   try {
     // Load the PDF document
     const loadingTask = pdfjs.getDocument({
