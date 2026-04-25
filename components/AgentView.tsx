@@ -42,19 +42,19 @@ const agentStyles = `
 
   .agent-root {
     font-family: 'DM Sans', system-ui, sans-serif;
-    --ink: #1c0f05;
-    --ink-2: #4a2c0a;
-    --ink-3: #a16207;
-    --violet: #f97316;
-    --violet-soft: #fff7ed;
-    --violet-mid: #fdba74;
+    --ink: #3d2914;
+    --ink-2: #5c3d1e;
+    --ink-3: #8b6914;
+    --violet: #efd083;
+    --violet-soft: #faf6e7;
+    --violet-mid: #d4b65a;
     --emerald: #059669;
-    --amber: #b45309;
+    --amber: #8b6914;
     --red: #dc2626;
-    --surface: #fff7ed;
-    --card: #ffffff;
-    --border: #fed7aa;
-    --border-strong: #fb923c;
+    --surface: #fef9e7;
+    --card: #fffff8;
+    --border: #e8dcc8;
+    --border-strong: #d4c4a8;
   }
 
   .agent-header {
@@ -67,9 +67,9 @@ const agentStyles = `
   .agent-header-icon {
     width: 32px; height: 32px;
     border-radius: 9px;
-    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    background: linear-gradient(135deg, #efd083 0%, #d4b65a 100%);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(249,115,22,0.35);
+    box-shadow: 0 2px 8px rgba(239,208,131,0.35);
     flex-shrink: 0;
   }
   .agent-header-title {
@@ -108,9 +108,9 @@ const agentStyles = `
     overflow: hidden;
   }
   .agent-status-bar.loading {
-    background: linear-gradient(90deg, #fff7ed 0%, #ffedd5 100%);
+    background: linear-gradient(90deg, #fef9e7 0%, #fff8dc 100%);
     border-color: var(--violet-mid);
-    color: #c2410c;
+    color: #8b6914;
   }
   .agent-status-bar.error {
     background: #fffbeb;
@@ -130,7 +130,7 @@ const agentStyles = `
   .agent-scan-line {
     position: absolute; top: 0; left: 0;
     width: 25%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(249,115,22,0.12), transparent);
+    background: linear-gradient(90deg, transparent, rgba(239,208,131,0.12), transparent);
     animation: agent-scan 1.8s linear infinite;
   }
   .agent-spin-ring {
@@ -169,17 +169,17 @@ const agentStyles = `
       45deg,
       transparent,
       transparent 8px,
-      rgba(249,115,22,0.025) 8px,
-      rgba(249,115,22,0.025) 9px
+      rgba(239,208,131,0.025) 8px,
+      rgba(239,208,131,0.025) 9px
     );
     animation: agent-fade-up 0.5s ease 0.1s both;
   }
   .agent-empty-icon-wrap {
     width: 52px; height: 52px; border-radius: 16px;
-    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    background: linear-gradient(135deg, #efd083 0%, #d4b65a 100%);
     display: flex; align-items: center; justify-content: center;
     margin-bottom: 14px;
-    box-shadow: 0 4px 16px rgba(249,115,22,0.3);
+    box-shadow: 0 4px 16px rgba(239,208,131,0.3);
     animation: agent-pulse-ring 2.5s ease infinite;
   }
   .agent-empty-title {
@@ -223,10 +223,10 @@ const agentStyles = `
     white-space: pre-wrap;
   }
   .agent-bubble.user {
-    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    background: linear-gradient(135deg, #efd083 0%, #d4b65a 100%);
     color: #fff;
     border-radius: 16px 16px 4px 16px;
-    box-shadow: 0 2px 10px rgba(249,115,22,0.3);
+    box-shadow: 0 2px 10px rgba(239,208,131,0.3);
   }
   .agent-bubble.assistant {
     background: var(--card);
@@ -308,7 +308,7 @@ const agentStyles = `
   }
   .agent-input:focus {
     border-color: var(--violet);
-    box-shadow: 0 0 0 3px rgba(249,115,22,0.12);
+    box-shadow: 0 0 0 3px rgba(239,208,131,0.12);
   }
   .agent-input::placeholder { color: var(--ink-3); }
   .agent-send-btn {
@@ -324,12 +324,12 @@ const agentStyles = `
     white-space: nowrap;
   }
   .agent-send-btn.active {
-    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    background: linear-gradient(135deg, #efd083 0%, #d4b65a 100%);
     color: #fff;
-    box-shadow: 0 2px 10px rgba(249,115,22,0.35);
+    box-shadow: 0 2px 10px rgba(239,208,131,0.35);
   }
   .agent-send-btn.active:hover {
-    box-shadow: 0 4px 16px rgba(249,115,22,0.5);
+    box-shadow: 0 4px 16px rgba(239,208,131,0.5);
     transform: translateY(-1px);
   }
   .agent-send-btn.disabled {
@@ -362,7 +362,7 @@ const agentStyles = `
     background: var(--card);
     border: 1px solid var(--border-strong);
     border-radius: 14px;
-    box-shadow: 0 8px 28px rgba(249,115,22,0.18);
+    box-shadow: 0 8px 28px rgba(239,208,131,0.18);
     z-index: 100;
     overflow: hidden;
     max-height: 280px;
@@ -411,13 +411,13 @@ const agentStyles = `
   /* Markdown in assistant bubbles */
   .agent-md p, .agent-md span[style] { display: block; margin-bottom: 4px; }
   .agent-md code {
-    background: rgba(249,115,22,0.08);
-    border: 1px solid rgba(249,115,22,0.15);
+    background: rgba(239,208,131,0.08);
+    border: 1px solid rgba(239,208,131,0.15);
     border-radius: 4px;
     padding: 1px 5px;
     font-family: 'DM Mono', monospace;
     font-size: 0.88em;
-    color: #c2410c;
+    color: #8b6914;
   }
   .agent-md ul, .agent-md ol { margin: 4px 0; padding-left: 18px; }
   .agent-md li { margin-bottom: 2px; }

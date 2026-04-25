@@ -111,7 +111,7 @@ const Header: React.FC<HeaderProps> = ({
         borderBottom: "1px solid #e5e7eb",
         borderRadius: borderRadius.sm,
         background: isAgentMode
-          ? "linear-gradient(135deg, #f97316 0%, #ea580c 100%)"
+          ? "linear-gradient(135deg, #efd083 0%, #d4b65a 100%)"
           : "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
         color: "#fff",
         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)"
@@ -119,7 +119,7 @@ const Header: React.FC<HeaderProps> = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 18, lineHeight: "24px", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
-            {isAgentMode ? <Zap size={18} /> : "⚡"} Impulse
+            {isAgentMode ? <Zap size={18} /> : <MessageSquare size={16} />} Impulse
             <span style={{ 
               fontSize: 10, 
               padding: "2px 6px", 
