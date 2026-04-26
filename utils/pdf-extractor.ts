@@ -4,10 +4,12 @@
  */
 import * as pdfjs from "pdfjs-dist"
 
-// Disable the worker entirely — run PDF.js in the main thread.
-// In a Chrome Extension sidepanel, worker URLs are hard to resolve correctly,
-// and the main-thread fallback is reliable for our use case.
-pdfjs.GlobalWorkerOptions.workerSrc = ""
+// pdfjs-dist v5 requires a non-empty workerSrc.
+// Use a bundled worker asset URL so it works inside the extension package.
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString()
 
 export interface PdfExtractResult {
   text: string
