@@ -1,9 +1,11 @@
 import React, { useState } from "react"
 import { borderRadius, shadows, transitions } from "~utils/design-tokens"
-import { Settings, X } from "lucide-react"
+import { Globe, Moon, Settings, Sun, X } from "lucide-react"
 
 import { resetClient } from "~utils/llm-client"
 import { clearConfig, saveLLMConfig } from "~utils/storage"
+import type { Language, Theme } from "~types"
+import { t } from "~utils/i18n"
 
 interface ConfigPreset {
   label: string
@@ -25,6 +27,10 @@ interface ConfigModalProps {
   initialBaseURL?: string
   initialModel?: string
   onSave: (hasKey: boolean) => void
+  lang: Language
+  theme: Theme
+  onSetLang: (lang: Language) => void
+  onSetTheme: (theme: Theme) => void
 }
 
 const ConfigModal: React.FC<ConfigModalProps> = ({
@@ -33,7 +39,11 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
   initialApiKey = "",
   initialBaseURL = "",
   initialModel = "gpt-4o-mini",
-  onSave
+  onSave,
+  lang,
+  theme,
+  onSetLang,
+  onSetTheme
 }) => {
   const [configApiKey, setConfigApiKey] = useState(initialApiKey)
   const [configBaseURL, setConfigBaseURL] = useState(initialBaseURL)
@@ -233,6 +243,70 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                 onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
               />
             )}
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontWeight: 600, fontSize: 12, color: "#374151", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              {t("options.languageLabel")}
+            </label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["en", "zh"] as Language[]).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => onSetLang(l)}
+                  style={{
+                    flex: 1,
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    border: lang === l ? "2px solid #0d9488" : "2px solid #e5e7eb",
+                    borderRadius: borderRadius.sm,
+                    background: lang === l ? "#f0fdfa" : "#fff",
+                    color: lang === l ? "#0d9488" : "#374151",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6
+                  }}
+                >
+                  <Globe size={14} />
+                  {l === "en" ? "English" : "中文"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", fontWeight: 600, fontSize: 12, color: "#374151", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              {t("options.themeLabel")}
+            </label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["light", "dark"] as Theme[]).map((th) => (
+                <button
+                  key={th}
+                  onClick={() => onSetTheme(th)}
+                  style={{
+                    flex: 1,
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    border: theme === th ? "2px solid #0d9488" : "2px solid #e5e7eb",
+                    borderRadius: borderRadius.sm,
+                    background: theme === th ? "#f0fdfa" : "#fff",
+                    color: theme === th ? "#0d9488" : "#374151",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6
+                  }}
+                >
+                  {th === "light" ? <Sun size={14} /> : <Moon size={14} />}
+                  {th === "light" ? t("options.themLight") : t("options.themeDark")}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>

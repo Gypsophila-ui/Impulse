@@ -141,6 +141,7 @@ export default function Sidepanel() {
     { label: "Custom", baseURL: "custom", models: [] }
   ]
   const [showConfig, setShowConfig] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const [configApiKey, setConfigApiKey] = useState("")
   const [configBaseURL, setConfigBaseURL] = useState("")
   const [configModel, setConfigModel] = useState("gpt-4o-mini")
@@ -377,9 +378,8 @@ export default function Sidepanel() {
 
       {/* 头部区域 */}
       <Header
-        lang={lang}
-        theme={theme}
         mode={mode}
+        scrolled={scrolled}
         activeTab={activeTab}
         metadata={metadata}
         notes={notes}
@@ -387,11 +387,7 @@ export default function Sidepanel() {
         chatMessages={chatMessages}
         currentTitle={currentTitle}
         onSetActiveTab={setActiveTab}
-        onSetLang={setLang}
-        onSetTheme={setThemeState}
         onSetMode={setMode}
-        onStoreLanguage={storeLanguage}
-        onStoreTheme={storeTheme}
         onShowConfig={() => setShowConfig(true)}
         onSetConfigApiKey={setConfigApiKey}
         onSetConfigBaseURL={setConfigBaseURL}
@@ -429,6 +425,7 @@ export default function Sidepanel() {
           onSetChatSummary={setChatSummary}
           onSetReadingGoal={setReadingGoal}
           onAskUserQuestion={handleAskUserQuestion}
+          onScrollChange={setScrolled}
         />
       ) : (
         <>
@@ -564,6 +561,17 @@ export default function Sidepanel() {
               setConfigBaseURL("")
               setConfigModel("gpt-4o-mini")
             }
+          }}
+          lang={lang}
+          theme={theme}
+          onSetLang={(newLang) => {
+            setLang(newLang)
+            setCurrentLanguage(newLang)
+            storeLanguage(newLang)
+          }}
+          onSetTheme={(newTheme) => {
+            setThemeState(newTheme)
+            storeTheme(newTheme)
           }}
         />
       )}

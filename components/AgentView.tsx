@@ -486,6 +486,7 @@ interface AgentViewProps {
   onSetChatSummary: (summary: string | undefined) => void
   onSetReadingGoal: (goal: ReadingGoal) => void
   onAskUserQuestion: (params: AskUserQuestionParams) => Promise<AskUserQuestionResult>
+  onScrollChange?: (scrolled: boolean) => void
 }
 
 const AgentView: React.FC<AgentViewProps> = ({
@@ -513,9 +514,12 @@ const AgentView: React.FC<AgentViewProps> = ({
   onSetLastToolCalls,
   onSetChatSummary,
   onSetReadingGoal,
-  onAskUserQuestion
+  onAskUserQuestion,
+  onScrollChange
 }) => {
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const autoSendRef = useRef(false)
 
   // Skill slash-command menu state
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -636,8 +640,21 @@ const AgentView: React.FC<AgentViewProps> = ({
     }
   }, [selectedText])
 
-  const handleSendChat = async () => {
-    if (!chatInput.trim() || chatLoading) return
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container || !onScrollChange) return
+
+    const handleScroll = () => {
+      onScrollChange(container.scrollTop > 10)
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
+    return () => container.removeEventListener("scroll", handleScroll)
+  }, [onScrollChange])
+
+  const handleSendChat = async (overrideInput?: string) => {
+    const input = (overrideInput ?? chatInput).trim()
+    if (!input || chatLoading) return
 
     if (!hasKey) {
       onShowMessage(
@@ -646,7 +663,7 @@ const AgentView: React.FC<AgentViewProps> = ({
       return
     }
 
-    const userMessage: ChatMessage = { role: "user", content: chatInput.trim() }
+    const userMessage: ChatMessage = { role: "user", content: input }
     const newMessages = [...chatMessages, userMessage]
     onSetChatMessages(newMessages)
     onSetChatInput("")
@@ -707,8 +724,18 @@ const AgentView: React.FC<AgentViewProps> = ({
     }
   }
 
+  const getStartAnalysisPrompt = useCallback((goal: ReadingGoal): string => {
+    const prompts: Record<ReadingGoal, string> = {
+      understand_method: "请按照「了解方法」的阅读目标分析这篇论文，重点分析方法论和技术路线。",
+      find_details: "请按照「寻找实现细节」的阅读目标分析这篇论文，重点分析具体实现和参数设置。",
+      evaluate_novelty: "请按照「评估新颖性」的阅读目标分析这篇论文，重点分析创新点和学术贡献。",
+      prepare_citation: "请按照「准备引用」的阅读目标分析这篇论文，重点分析关键发现和结论。"
+    }
+    return prompts[goal]
+  }, [])
+
   return (
-    <div className="agent-root" style={{ 
+    <div className="agent-root" ref={scrollContainerRef} style={{ 
       padding: 16, 
       overflow: "auto", 
       flex: 1, 
