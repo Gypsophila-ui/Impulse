@@ -75,7 +75,8 @@ const ReadingGoalSelector: React.FC<ReadingGoalSelectorProps> = ({
             alignItems: "center",
             justifyContent: "space-between",
             transition: "border-color 0.2s ease",
-            userSelect: "none"
+            userSelect: "none",
+            boxSizing: "border-box"
           }}
         >
           <span>{t(READING_GOAL_CONFIG[value].labelKey)}</span>
@@ -97,6 +98,7 @@ const ReadingGoalSelector: React.FC<ReadingGoalSelectorProps> = ({
               top: "100%",
               left: 0,
               right: 0,
+              width: "100%",
               marginTop: 4,
               borderRadius: borderRadius.sm,
               background: colors.cardBg,
@@ -104,7 +106,8 @@ const ReadingGoalSelector: React.FC<ReadingGoalSelectorProps> = ({
               boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
               zIndex: 50,
               overflow: "hidden",
-              animation: "fadeIn 0.15s ease"
+              animation: "fadeIn 0.15s ease",
+              boxSizing: "border-box"
             }}
           >
             {(Object.keys(READING_GOAL_CONFIG) as ReadingGoal[]).map((goal) => (
