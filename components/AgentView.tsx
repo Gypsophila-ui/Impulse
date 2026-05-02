@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { AlertTriangle, FileText, Slash, Sparkles, Zap } from "lucide-react"
 import rehypeKatex from "rehype-katex"
+import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import ReactMarkdown from "react-markdown"
 import "katex/dist/katex.min.css"
@@ -429,12 +430,32 @@ const agentStyles = `
   .agent-md h1 { font-size: 16px; }
   .agent-md h2 { font-size: 14px; }
   .agent-md h3 { font-size: 13px; }
+  .agent-md table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 12px;
+    width: 100%;
+  }
+  .agent-md th, .agent-md td {
+    border: 1px solid var(--border-strong);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .agent-md th {
+    background: var(--violet-soft);
+    font-weight: 600;
+    font-size: 11.5px;
+  }
+  .agent-md td {
+    background: var(--card);
+  }
+  .agent-md thead { border-bottom: 2px solid var(--violet-mid); }
 `
 
 const MdText: React.FC<{ children: string }> = ({ children }) => (
   <div className="agent-md">
     <ReactMarkdown
-      remarkPlugins={[remarkMath]}
+      remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeKatex]}
       components={{
         p: ({ children }) => <span style={{ display: "block", marginBottom: 4 }}>{children}</span>,
@@ -445,6 +466,12 @@ const MdText: React.FC<{ children: string }> = ({ children }) => (
         h1: ({ children }) => <h1>{children}</h1>,
         h2: ({ children }) => <h2>{children}</h2>,
         h3: ({ children }) => <h3>{children}</h3>,
+        table: ({ children }) => <table>{children}</table>,
+        thead: ({ children }) => <thead>{children}</thead>,
+        tbody: ({ children }) => <tbody>{children}</tbody>,
+        tr: ({ children }) => <tr>{children}</tr>,
+        th: ({ children }) => <th>{children}</th>,
+        td: ({ children }) => <td>{children}</td>,
       }}
     >
       {children}
