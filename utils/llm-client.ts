@@ -98,7 +98,7 @@ ${goalPrompt}
       }
     ],
     temperature: 0.7,
-    max_tokens: 500
+    max_tokens: 2000
   })
 
   return response.choices[0]?.message?.content || "生成摘要失败"
@@ -131,7 +131,7 @@ export async function translate(
       }
     ],
     temperature: 0.3,
-    max_tokens: 1000
+    max_tokens: 4000
   })
 
   return response.choices[0]?.message?.content || "翻译失败"
@@ -228,7 +228,7 @@ ${goalPrompt}
     model: config?.model || "gpt-4o-mini",
     messages: apiMessages,
     temperature: 0.5,
-    max_tokens: 800
+    max_tokens: 4000
   })
 
   return response.choices[0]?.message?.content || "无法生成回答"
@@ -440,7 +440,7 @@ ${goalPrompt}
         tools: PAPER_TOOLS,
         tool_choice: currentRound === 0 ? "auto" : "auto",
         temperature: 0.5,
-        max_tokens: 1000
+        max_tokens: 8000
       })
     } catch (e: any) {
       const isToolCallingUnsupported =
@@ -604,7 +604,7 @@ export async function compressHistory(
       }
     ],
     temperature: 0.3,
-    max_tokens: 500
+    max_tokens: 1500
   })
 
   const summary = response.choices[0]?.message?.content || ""
@@ -673,7 +673,7 @@ ${paperSummaries}
     model: config?.model || "gpt-4o-mini",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.3,
-    max_tokens: 2000
+    max_tokens: 6000
   })
 
   const content = response.choices[0]?.message?.content || "{}"
