@@ -2,6 +2,7 @@ import OpenAI from "openai"
 import type { PaperMetadata, ReadingGoal } from "~types"
 import type { AppMode, TabKey } from "~components/common/Header"
 import { getLLMConfig } from "~utils/storage"
+import { extractCodeContext, formatCodeContextForAI, type CodeContext } from "./code-context-extractor"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ export interface BugReport {
   errors: string[]
   pageInfo?: Record<string, unknown>
   userDescription: string
+  codeContext?: CodeContext
 }
 
 // ─── Console Interception ───────────────────────────────────────────────────
@@ -169,6 +171,17 @@ export async function collectBugReport(params: CollectBugReportParams): Promise<
     ? config.baseURL.replace(/(api[_-]?key|key|token)=[^&]+/gi, "$1=***")
     : ""
 
+  const consoleBuffer = getConsoleBuffer()
+  const errorHistory = getErrorHistory()
+
+  // Extract code context
+  let codeContext: CodeContext | undefined
+  try {
+    codeContext = await extractCodeContext(errorHistory, consoleBuffer, 3)
+  } catch {
+    // Continue without code context if extraction fails
+  }
+
   return {
     meta: {
       timestamp: new Date().toISOString(),
@@ -201,10 +214,11 @@ export async function collectBugReport(params: CollectBugReportParams): Promise<
       highlightsCount: params.highlightsCount,
       chatMessagesCount: params.chatMessagesCount
     },
-    console: getConsoleBuffer(),
-    errors: getErrorHistory(),
+    console: consoleBuffer,
+    errors: errorHistory,
     pageInfo: params.pageInfo,
-    userDescription: params.userDescription
+    userDescription: params.userDescription,
+    codeContext
   }
 }
 
@@ -261,6 +275,30 @@ export function formatBugReportAsMarkdown(report: BugReport): string {
     lines.push("")
   }
 
+  if (report.codeContext && report.codeContext.snippets.length > 0) {
+    lines.push("## Code Context")
+    for (const snippet of report.codeContext.snippets) {
+      lines.push(`### ${snippet.file}:${snippet.line}`)
+      if (snippet.functionName) {
+        lines.push(`Function: ${snippet.functionName}`)
+      }
+      lines.push("")
+      lines.push("```" + snippet.language)
+
+      const startLine = Math.max(1, snippet.line - snippet.linesBefore.length)
+      snippet.linesBefore.forEach((line, i) => {
+        lines.push(`${startLine + i} | ${line}`)
+      })
+      lines.push(`${snippet.line} | ${snippet.code}  ← ERROR`)
+      snippet.linesAfter.forEach((line, i) => {
+        lines.push(`${snippet.line + 1 + i} | ${line}`)
+      })
+
+      lines.push("```")
+      lines.push("")
+    }
+  }
+
   if (report.console.length > 0) {
     lines.push("## Console Logs (last 50)")
     lines.push("")
@@ -313,6 +351,11 @@ export async function diagnoseWithAI(report: BugReport): Promise<DiagnosisResult
     .join("\n")
 
   const errorSummary = report.errors.slice(-10).join("\n")
+  
+  let codeContextSection = ""
+  if (report.codeContext && report.codeContext.snippets.length > 0) {
+    codeContextSection = formatCodeContextForAI(report.codeContext)
+  }
 
   const contextPrompt = `You are an expert debugging assistant for "Impulse", a Chrome Extension that is an AI-powered PDF reading assistant. Analyze the following diagnostic data and provide a diagnosis.
 
@@ -344,6 +387,8 @@ export async function diagnoseWithAI(report: BugReport): Promise<DiagnosisResult
 ## Captured Errors
 ${errorSummary || "(none)"}
 
+${codeContextSection}
+
 ## Recent Console Logs
 ${consoleSummary || "(none)"}
 
@@ -374,7 +419,7 @@ Return ONLY the JSON, no other text.`
       model: config.model || "gpt-4o-mini",
       messages: [{ role: "user", content: contextPrompt }],
       temperature: 0.3,
-      max_tokens: 800,
+      max_tokens: 1000,
       response_format: { type: "json_object" }
     })
 

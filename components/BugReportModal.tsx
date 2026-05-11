@@ -95,7 +95,10 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
     return r
   }, [mode, activeTab, lang, theme, readingGoal, currentUrl, currentTitle, selectedText, metadata, currentTabId, notesCount, highlightsCount, chatMessagesCount])
 
-  // Collect context silently on open (no auto-analysis)
+  // Track previous page to detect navigation while modal is open
+  const prevUrlRef = useRef(currentUrl)
+
+  // Collect context silently on open, and rebuild when page changes
   useEffect(() => {
     if (!show) {
       hasRunRef.current = false
@@ -103,10 +106,20 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
       setDiagnosis(null)
       setDiagnosisError(null)
       setFixResult(null)
+      prevUrlRef.current = currentUrl
       return
     }
-    if (hasRunRef.current) return
+    if (hasRunRef.current && currentUrl === prevUrlRef.current) return
     hasRunRef.current = true
+
+    const isPageChange = prevUrlRef.current !== currentUrl
+    prevUrlRef.current = currentUrl
+
+    if (isPageChange) {
+      setDiagnosis(null)
+      setDiagnosisError(null)
+      setFixResult(null)
+    }
 
     const init = async () => {
       let pi: Record<string, unknown> | undefined
@@ -127,16 +140,16 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
     }
 
     void init()
-  }, [show])
+  }, [show, currentUrl])
 
   const handleAnalyze = async () => {
-    // Rebuild with latest description before analyzing
-    const r = await buildReport(userDescription, pageInfo)
     setDiagnosing(true)
     setDiagnosisError(null)
     setDiagnosis(null)
     setFixResult(null)
     try {
+      // Rebuild with latest description before analyzing
+      const r = await buildReport(userDescription, pageInfo)
       const result = await diagnoseWithAI(r)
       setDiagnosis(result)
     } catch (e: any) {
@@ -549,6 +562,61 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
                     </div>
                   ))}
                 </div>
+
+                {/* Code Context Display */}
+                {report?.codeContext && report.codeContext.snippets.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#0f766e",
+                        marginBottom: 6,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px"
+                      }}>
+                      Code Context
+                    </div>
+                    <div
+                      style={{
+                        background: "#1f2937",
+                        borderRadius: borderRadius.sm,
+                        padding: 10,
+                        maxHeight: 200,
+                        overflow: "auto"
+                      }}>
+                      {report.codeContext.snippets.map((snippet, idx) => (
+                        <div key={idx} style={{ marginBottom: idx < report.codeContext.snippets.length - 1 ? 10 : 0 }}>
+                          <div
+                            style={{
+                              color: "#6ee7b7",
+                              fontSize: 10,
+                              marginBottom: 4,
+                              fontFamily: "monospace"
+                            }}>
+                            {snippet.file}:{snippet.line}
+                            {snippet.functionName && ` in ${snippet.functionName}`}
+                          </div>
+                          <div style={{ fontFamily: "monospace", fontSize: 10 }}>
+                            {snippet.linesBefore.map((line, i) => (
+                              <div key={`before-${i}`} style={{ color: "#9ca3af" }}>
+                                {Math.max(1, snippet.line - snippet.linesBefore.length) + i} | {line}
+                              </div>
+                            ))}
+                            <div style={{ color: "#fca5a5", background: "rgba(248,113,113,0.1)" }}>
+                              {snippet.line} | {snippet.code} ← ERROR
+                            </div>
+                            {snippet.linesAfter.map((line, i) => (
+                              <div key={`after-${i}`} style={{ color: "#9ca3af" }}>
+                                {snippet.line + 1 + i} | {line}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Export buttons */}
                 <div style={{ display: "flex", gap: 8 }}>
