@@ -29,8 +29,8 @@ const Spinner = () => (
 
 export default function Options() {
   const [apiKey, setApiKey] = useState("")
-  const [model, setModel] = useState("gpt-4o-mini")
-  const [baseURL, setBaseURL] = useState("")
+  const [model, setModel] = useState("deepseek-chat")
+  const [baseURL, setBaseURL] = useState("https://api.deepseek.com/v1")
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [showKey, setShowKey] = useState(false)
@@ -40,14 +40,14 @@ export default function Options() {
   // Provider presets
   const presets: Array<{ label: string; baseURL: string; models: string[] }> = [
     {
-      label: "OpenAI",
-      baseURL: "",
-      models: ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
-    },
-    {
       label: "DeepSeek",
       baseURL: "https://api.deepseek.com/v1",
       models: ["deepseek-chat", "deepseek-reasoner"]
+    },
+    {
+      label: "OpenAI",
+      baseURL: "",
+      models: ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
     },
     {
       label: "Qwen (Alibaba)",
@@ -78,7 +78,7 @@ export default function Options() {
 
   const handleSave = async () => {
     if (!apiKey.trim()) {
-      setMessage("error:Please enter your OpenAI API Key")
+      setMessage("error:Please enter your API Key")
       return
     }
 
@@ -88,7 +88,7 @@ export default function Options() {
     try {
       const effectiveBaseURL = baseURL === "custom" ? "" : baseURL
       await saveLLMConfig({
-        provider: "openai",
+        provider: "openai", // 保持 OpenAI 类型用于 API 兼容性
         apiKey: apiKey.trim(),
         model,
         baseURL: effectiveBaseURL || undefined
@@ -108,8 +108,8 @@ export default function Options() {
       try {
         await clearConfig()
         setApiKey("")
-        setBaseURL("")
-        setModel("gpt-4o-mini")
+        setBaseURL("https://api.deepseek.com/v1")
+        setModel("deepseek-chat")
         setMessage("success:Configuration cleared")
         setTimeout(() => setMessage(""), 3000)
       } catch (e: any) {
@@ -173,7 +173,7 @@ export default function Options() {
           <div style={{ fontSize: 48, marginBottom: 8 }}>⚡</div>
           <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Impulse Settings</h1>
           <p style={{ color: "rgba(255, 255, 255, 0.9)", fontSize: 14 }}>
-            Configure your OpenAI API key to unlock AI-powered features
+            Configure your DeepSeek API key to unlock AI-powered features
           </p>
         </div>
 
@@ -197,11 +197,11 @@ export default function Options() {
               <br />
               1. Get your API key from{" "}
               <a
-                href="https://platform.openai.com/api-keys"
+                href="https://platform.deepseek.com"
                 target="_blank"
                 rel="noreferrer"
                 style={{ color: "#0d9488", textDecoration: "underline" }}>
-                OpenAI Platform
+                DeepSeek Platform
               </a>
               <br />
               2. Choose your preferred model
@@ -222,7 +222,7 @@ export default function Options() {
                 textTransform: "uppercase",
                 letterSpacing: "0.5px"
               }}>
-              🔑 OpenAI API Key *
+              🔌 API Key *
             </label>
             <div style={{ position: "relative" }}>
               <input
@@ -565,16 +565,16 @@ export default function Options() {
           }}>
           <div style={{ marginBottom: 8 }}>
             <strong>Privacy Notice:</strong> Your API key is stored locally in your browser and is
-            only used to communicate directly with OpenAI.
+            only used to communicate directly with DeepSeek.
           </div>
           <div>
             Need help? Visit{" "}
             <a
-              href="https://platform.openai.com/docs"
+              href="https://platform.deepseek.com/docs"
               target="_blank"
               rel="noreferrer"
               style={{ color: "#0d9488", textDecoration: "underline" }}>
-              OpenAI Documentation
+              DeepSeek Documentation
             </a>
           </div>
         </div>

@@ -1,12 +1,13 @@
 import React from "react"
 import { borderRadius } from "~utils/design-tokens"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, Sparkles } from "lucide-react"
 
 interface ErrorAlertProps {
   error: string | null
+  onDiagnose?: () => void
 }
 
-const ErrorAlert: React.FC<ErrorAlertProps> = ({ error }) => {
+const ErrorAlert: React.FC<ErrorAlertProps> = ({ error, onDiagnose }) => {
   if (!error) return null
 
   return (
@@ -27,6 +28,31 @@ const ErrorAlert: React.FC<ErrorAlertProps> = ({ error }) => {
       }}>
       <AlertTriangle size={16} color="#991b1b" />
       <div style={{ flex: 1 }}>{error}</div>
+      {onDiagnose && (
+        <button
+          onClick={onDiagnose}
+          title="AI Diagnose"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "4px 10px",
+            fontSize: 11,
+            fontWeight: 600,
+            background: "#7c3aed",
+            color: "#fff",
+            border: "none",
+            borderRadius: borderRadius.xs,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+            transition: "opacity 0.15s"
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}>
+          <Sparkles size={11} /> Diagnose
+        </button>
+      )}
     </div>
   )
 }

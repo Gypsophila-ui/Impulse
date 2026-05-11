@@ -1,5 +1,5 @@
 import React from "react"
-import { Bot, FileText, Globe, MessageSquare, Settings, Sparkles, Zap } from "lucide-react"
+import { Bot, Bug, FileText, Globe, MessageSquare, Settings, Sparkles, Zap } from "lucide-react"
 
 import type { ChatMessage, PaperMetadata } from "~types"
 import { borderRadius, shadows } from "~utils/design-tokens"
@@ -35,6 +35,7 @@ interface HeaderProps {
   onSetConfigBaseURL: (url: string) => void
   onSetConfigModel: (model: string) => void
   onSetConfigMessage: (message: string) => void
+  onReportBug: () => void
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -52,7 +53,8 @@ const Header: React.FC<HeaderProps> = ({
   onSetConfigApiKey,
   onSetConfigBaseURL,
   onSetConfigModel,
-  onSetConfigMessage
+  onSetConfigMessage,
+  onReportBug
 }) => {
   const isAgentMode = mode === "agent"
 
@@ -172,6 +174,24 @@ const Header: React.FC<HeaderProps> = ({
               alignItems: "center"
             }}>
             <Settings size={compact ? 14 : 16} />
+          </button>
+          <button
+            onClick={onReportBug}
+            className="btn-hover"
+            title="Report a Bug"
+            style={{
+              padding: compact ? "6px 8px" : "8px 10px",
+              fontSize: 14,
+              background: "rgba(255, 255, 255, 0.25)",
+              color: "#fff",
+              border: "1px solid rgba(255, 255, 255, 0.3)",
+              borderRadius: borderRadius.sm,
+              cursor: "pointer",
+              backdropFilter: "blur(10px)",
+              display: "flex",
+              alignItems: "center"
+            }}>
+            <Bug size={compact ? 14 : 16} />
           </button>
           <button
             onClick={handleExport}

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react"
 import {
   AgentView,
   AskUserQuestionModal,
+  BugReportModal,
   ConfigModal,
   ContentArea,
   ErrorAlert,
@@ -26,7 +27,10 @@ import {
   translate
 } from "./utils/llm-client"
 import {
+  clearConfig,
   deleteChatSession,
+  deleteHighlightsByUrl,
+  deleteNote,
   getChatSessionByUrl,
   getHighlightsByUrl,
   getLanguage,
@@ -41,6 +45,9 @@ import {
   type Highlight,
   type Note
 } from "./utils/storage"
+
+import { startConsoleInterception, stopConsoleInterception } from "./utils/bug-report"
+import type { DiagnosisResult } from "./utils/bug-report"
 
 import type { AppMode, TabKey } from "./components/common/Header"
 
@@ -123,6 +130,59 @@ export default function Sidepanel() {
     askQuestionResolve?.({ selected: "", isCustomInput: false })
   }
 
+  // Auto-fix handler for AI diagnosis
+  const handleApplyFix = async (
+    action: DiagnosisResult["autoFixAction"],
+    params: Record<string, unknown>
+  ): Promise<boolean> => {
+    try {
+      switch (action) {
+        case "clear_data": {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          const url = tab?.url || currentUrl
+          if (url) {
+            await deleteHighlightsByUrl(url)
+            await deleteChatSession(url)
+            const pageNotes = await getNotesByUrl(url)
+            for (const note of pageNotes) {
+              await deleteNote(note.id)
+            }
+            void loadNotes()
+            void loadHighlights()
+            void loadChatSession()
+          }
+          return true
+        }
+        case "reset_config": {
+          await clearConfig()
+          resetClient()
+          setHasKey(false)
+          setShowConfig(true)
+          setConfigMessage("success:Configuration cleared. Please re-enter your API key.")
+          return true
+        }
+        case "retry": {
+          // Re-trigger by refreshing the current tab context
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (tab?.id) {
+            await chrome.tabs.reload(tab.id)
+          }
+          return true
+        }
+        case "switch_model": {
+          setShowConfig(true)
+          setConfigMessage("Please select a different model in the configuration.")
+          return true
+        }
+        default:
+          return false
+      }
+    } catch (e) {
+      console.error("Auto-fix failed:", e)
+      return false
+    }
+  }
+
   // Metadata state
   const [metadata, setMetadata] = useState<PaperMetadata | null>(null)
   const [metadataExpanded, setMetadataExpanded] = useState(false)
@@ -140,6 +200,7 @@ export default function Sidepanel() {
     { label: "Qwen", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", models: ["qwen-plus", "qwen-turbo", "qwen-max"] },
     { label: "Custom", baseURL: "custom", models: [] }
   ]
+  const [showBugReport, setShowBugReport] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [configApiKey, setConfigApiKey] = useState("")
@@ -247,6 +308,12 @@ export default function Sidepanel() {
 
   useEffect(() => {
     hasApiKey().then(setHasKey)
+  }, [])
+
+  // Start console interception for bug reporting
+  useEffect(() => {
+    startConsoleInterception()
+    return () => stopConsoleInterception()
   }, [])
 
   // Reload data when switching tabs
@@ -393,9 +460,10 @@ export default function Sidepanel() {
         onSetConfigBaseURL={setConfigBaseURL}
         onSetConfigModel={setConfigModel}
         onSetConfigMessage={setConfigMessage}
+        onReportBug={() => setShowBugReport(true)}
       />
 
-      <ErrorAlert error={error} />
+      <ErrorAlert error={error} onDiagnose={() => setShowBugReport(true)} />
 
       {/* Agent Mode */}
       {mode === "agent" ? (
@@ -575,6 +643,27 @@ export default function Sidepanel() {
           }}
         />
       )}
+
+      {/* Bug Report Modal */}
+      <BugReportModal
+        show={showBugReport}
+        onClose={() => setShowBugReport(false)}
+        mode={mode}
+        activeTab={activeTab}
+        lang={lang}
+        theme={theme}
+        readingGoal={readingGoal}
+        currentUrl={currentUrl}
+        currentTitle={currentTitle}
+        selectedText={selectedText}
+        metadata={metadata}
+        currentTabId={currentTabId}
+        notesCount={notes.length}
+        highlightsCount={highlights.length}
+        chatMessagesCount={chatMessages.length}
+        error={error}
+        onApplyFix={handleApplyFix}
+      />
 
       {/* Ask User Question Modal */}
       {askQuestionParams && (

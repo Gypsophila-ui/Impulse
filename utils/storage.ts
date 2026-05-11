@@ -5,7 +5,7 @@
 import type { ChatMessage, ChatSession, Language, PaperMetadata, PaperSnapshot, SavedComparison, Theme } from "~types"
 
 export interface LLMConfig {
-  provider: "openai"
+  provider: "openai" | "deepseek"
   apiKey: string
   model?: string
   baseURL?: string // 兼容 Qwen / DeepSeek / 其他 OpenAI 兼容 API
