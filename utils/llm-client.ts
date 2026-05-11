@@ -76,7 +76,7 @@ export async function summarize(text: string, readingGoal?: ReadingGoal): Promis
   const goalPrompt = readingGoal ? getReadingGoalPrompt(readingGoal) : ""
 
   const response = await client.chat.completions.create({
-    model: config?.model || "gpt-4o-mini",
+    model: config?.model || "deepseek-chat",
     messages: [
       {
         role: "system",
@@ -115,7 +115,7 @@ export async function translate(
   const config = await getLLMConfig()
 
   const response = await client.chat.completions.create({
-    model: config?.model || "gpt-4o-mini",
+    model: config?.model || "deepseek-chat",
     messages: [
       {
         role: "system",
@@ -149,7 +149,7 @@ export async function generateHighlights(text: string): Promise<string[]> {
   const config = await getLLMConfig()
 
   const response = await client.chat.completions.create({
-    model: config?.model || "gpt-4o-mini",
+    model: config?.model || "deepseek-chat",
     messages: [
       {
         role: "system",
@@ -161,7 +161,7 @@ Guidelines:
 - Prioritize phrases that would be useful for quick reference or review
 - Extract concepts that appear central to the paper's contribution
 
-Return ONLY a valid JSON array of strings, with no additional text or explanation. Example format: ["phrase one", "phrase two", "phrase three"]`
+Return ONLY a valid JSON object with a "highlights" array field. Example: {"highlights": ["phrase one", "phrase two", "phrase three"]}`
       },
       {
         role: "user",
@@ -169,26 +169,16 @@ Return ONLY a valid JSON array of strings, with no additional text or explanatio
       }
     ],
     temperature: 0.3,
-    max_tokens: 300
+    max_tokens: 300,
+    response_format: { type: "json_object" }
   })
 
-  const content = response.choices[0]?.message?.content || "[]"
-
-  try {
-    // Parse JSON response
-    const phrases = JSON.parse(content)
-    if (Array.isArray(phrases)) {
-      return phrases.filter((p) => typeof p === "string" && p.length > 0).slice(0, 7)
-    }
-  } catch (e) {
-    // If not valid JSON, try to extract phrases from text
-    const lines = content
-      .split("\n")
-      .map((line) => line.trim().replace(/^[-*•]\s*/, "").replace(/^["']|["']$/g, ""))
-      .filter((line) => line.length > 3 && line.length < 100)
-    return lines.slice(0, 7)
+  const content = response.choices[0]?.message?.content || "{}"
+  const parsed = JSON.parse(content)
+  const phrases = parsed?.highlights || parsed?.phrases || []
+  if (Array.isArray(phrases)) {
+    return phrases.filter((p: unknown) => typeof p === "string" && p.length > 0).slice(0, 7)
   }
-
   return []
 }
 
@@ -228,7 +218,7 @@ ${goalPrompt}
   ]
 
   const response = await client.chat.completions.create({
-    model: config?.model || "gpt-4o-mini",
+    model: config?.model || "deepseek-chat",
     messages: apiMessages,
     temperature: 0.5,
     max_tokens: 4000
@@ -245,7 +235,7 @@ export async function extractMetadata(text: string): Promise<PaperMetadata> {
   const config = await getLLMConfig()
 
   const response = await client.chat.completions.create({
-    model: config?.model || "gpt-4o-mini",
+    model: config?.model || "deepseek-chat",
     messages: [
       {
         role: "system",
@@ -266,23 +256,18 @@ Return ONLY a valid JSON object with these exact field names. Use empty string "
       }
     ],
     temperature: 0.1,
-    max_tokens: 400
+    max_tokens: 400,
+    response_format: { type: "json_object" }
   })
 
   const content = response.choices[0]?.message?.content || "{}"
-
-  try {
-    const cleaned = content.replace(/```json\n?|\n?```/g, "").trim()
-    const parsed = JSON.parse(cleaned)
-    return {
-      title: parsed.title || "",
-      authors: Array.isArray(parsed.authors) ? parsed.authors : [],
-      year: parsed.year || "",
-      journal: parsed.journal || "",
-      doi: parsed.doi || ""
-    }
-  } catch {
-    return { title: "", authors: [], year: "", journal: "", doi: "" }
+  const parsed = JSON.parse(content)
+  return {
+    title: parsed.title || "",
+    authors: Array.isArray(parsed.authors) ? parsed.authors : [],
+    year: parsed.year || "",
+    journal: parsed.journal || "",
+    doi: parsed.doi || ""
   }
 }
 
@@ -438,7 +423,7 @@ ${goalPrompt}
     let response: OpenAI.Chat.Completions.ChatCompletion & { _request_id?: string | null }
     try {
       response = await client.chat.completions.create({
-        model: config?.model || "gpt-4o-mini",
+        model: config?.model || "deepseek-chat",
         messages: apiMessages,
         tools: PAPER_TOOLS,
         tool_choice: currentRound === 0 ? "auto" : "auto",
@@ -580,7 +565,7 @@ export async function compressHistory(
     : ""
 
   const response = await client.chat.completions.create({
-    model: config?.model || "gpt-4o-mini",
+    model: config?.model || "deepseek-chat",
     messages: [
       {
         role: "system",
@@ -673,29 +658,15 @@ ${paperSummaries}
 只返回 JSON，不要其他内容。`
 
   const response = await client.chat.completions.create({
-    model: config?.model || "gpt-4o-mini",
+    model: config?.model || "deepseek-chat",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.3,
-    max_tokens: 6000
+    max_tokens: 6000,
+    response_format: { type: "json_object" }
   })
 
   const content = response.choices[0]?.message?.content || "{}"
-  const cleaned = content.replace(/```json\n?|\n?```/g, "").trim()
-
-  let parsed: { summary: string; recommendation?: string; rows: Array<{ dimension: string; values: Record<string, string>; difference: string }> }
-
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch {
-    // Fallback: return a minimal structure with the raw text
-    return {
-      papers: snapshots,
-      dimensions,
-      rows: [],
-      summary: content.slice(0, 300),
-      generatedAt: Date.now()
-    }
-  }
+  const parsed: { summary: string; recommendation?: string; rows: Array<{ dimension: string; values: Record<string, string>; difference: string }> } = JSON.parse(content)
 
   const rows = (parsed.rows || []).map((row) => ({
     dimension: row.dimension as ComparisonDimension | string,
