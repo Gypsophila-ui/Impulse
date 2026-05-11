@@ -235,7 +235,7 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
         {/* Header */}
         <div
           style={{
-            background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+            background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
             padding: "14px 20px",
             color: "#fff",
             display: "flex",
@@ -279,7 +279,7 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
             <textarea
               value={userDescription}
               onChange={(e) => setUserDescription(e.target.value)}
-              placeholder="What were you doing? What went wrong? What did you expect to happen?"
+              placeholder="What were you doing? What went wrong? What did you expect to happen? Or you can start analyzing directly based on the known information."
               rows={4}
               style={{
                 width: "100%",
@@ -305,7 +305,7 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
                 padding: "12px 16px",
                 fontSize: 14,
                 fontWeight: 700,
-                background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+                background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
                 color: "#fff",
                 border: "none",
                 borderRadius: borderRadius.sm,
@@ -324,18 +324,18 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
               style={{
                 textAlign: "center",
                 padding: "24px 16px",
-                background: "#f5f3ff",
+                background: "#f0fdfa",
                 borderRadius: borderRadius.sm,
                 marginBottom: 12,
-                border: "1px solid #ede9fe"
+                border: "1px solid #ccfbf1"
               }}>
               <div style={{ marginBottom: 12 }}>
                 <Spinner />
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#5b21b6", marginBottom: 4 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#0f766e", marginBottom: 4 }}>
                 AI is analyzing...
               </div>
-              <div style={{ fontSize: 12, color: "#7c3aed" }}>
+              <div style={{ fontSize: 12, color: "#0d9488" }}>
                 Examining console logs, errors, and component state
               </div>
             </div>
@@ -358,7 +358,7 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
                     padding: "6px 14px",
                     fontSize: 12,
                     fontWeight: 600,
-                    background: "#7c3aed",
+                    background: "#0d9488",
                     color: "#fff",
                     border: "none",
                     borderRadius: borderRadius.xs,
@@ -452,7 +452,7 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
                     fontWeight: 700,
                     background: fixing
                       ? "#cbd5e1"
-                      : "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                      : "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
                     color: "#fff",
                     border: "none",
                     borderRadius: borderRadius.sm,
@@ -485,9 +485,9 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
                   padding: "8px 12px",
                   fontSize: 12,
                   fontWeight: 600,
-                  background: "#f5f3ff",
-                  color: "#7c3aed",
-                  border: "1px solid #ddd6fe",
+                  background: "#f0fdfa",
+                  color: "#0d9488",
+                  border: "1px solid #99f6e4",
                   borderRadius: borderRadius.sm,
                   cursor: diagnosing ? "not-allowed" : "pointer",
                   display: "flex",
@@ -559,7 +559,7 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
                       padding: "8px 10px",
                       fontSize: 11,
                       fontWeight: 600,
-                      background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+                      background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
                       color: "#fff",
                       border: "none",
                       borderRadius: borderRadius.sm,
