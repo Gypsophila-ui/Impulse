@@ -88,7 +88,6 @@ export default function Options() {
     try {
       const effectiveBaseURL = baseURL === "custom" ? "" : baseURL
       await saveLLMConfig({
-        provider: "openai", // 保持 OpenAI 类型用于 API 兼容性
         apiKey: apiKey.trim(),
         model,
         baseURL: effectiveBaseURL || undefined

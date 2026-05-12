@@ -4,6 +4,7 @@ import { AlertTriangle, Sparkles, Trash2, X } from "lucide-react"
 
 import type { Highlight } from "~utils/storage"
 import { deleteHighlight, deleteHighlightsByUrl, saveHighlights } from "~utils/storage"
+import { recordComponentEvent } from "~utils/bug-report"
 
 import Spinner from "../common/Spinner"
 
@@ -97,6 +98,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
     }
 
     onSetGeneratingHighlights(true)
+    recordComponentEvent("HighlightTab", "highlight_start", `chars=${selectedText.length}`)
 
     try {
       await saveHighlights(
@@ -111,8 +113,10 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
       await onLoadHighlights()
 
       onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Highlighted successfully!</>, "success")
+      recordComponentEvent("HighlightTab", "highlight_success")
     } catch (e: any) {
       onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to highlight:{"\n\n"}{e?.message ?? String(e)}</>, "error")
+      recordComponentEvent("HighlightTab", "highlight_error", e?.message || String(e))
     } finally {
       onSetGeneratingHighlights(false)
     }

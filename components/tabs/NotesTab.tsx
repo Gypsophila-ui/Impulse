@@ -4,6 +4,7 @@ import { AlertTriangle, FileText, MessageSquare, Pencil, Save, Sparkles, Trash2,
 
 import type { Note } from "~utils/storage"
 import { deleteNote, saveNote, updateNote } from "~utils/storage"
+import { recordComponentEvent } from "~utils/bug-report"
 
 import Spinner from "../common/Spinner"
 
@@ -59,6 +60,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
     if (editingNoteId) {
       try {
         onSetSavingNote(true)
+        recordComponentEvent("NotesTab", "note_update", editingNoteId)
         await updateNote(editingNoteId, commentDraft.trim())
         onSetCommentDraft("")
         onSetEditingNoteId(null)
@@ -67,6 +69,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
         setTimeout(() => onClearMessage(), 2000)
       } catch (e: any) {
         onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to update note: {e?.message ?? String(e)}</>, "error")
+        recordComponentEvent("NotesTab", "note_update_error", e?.message || String(e))
       } finally {
         onSetSavingNote(false)
       }
@@ -81,6 +84,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
       }
       try {
         onSetSavingNote(true)
+        recordComponentEvent("NotesTab", "note_save", `chars=${selectedText.length}`)
         await saveNote(
           selectedText.trim(),
           commentDraft.trim(),
@@ -93,6 +97,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
         setTimeout(() => onClearMessage(), 2000)
       } catch (e: any) {
         onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to save note: {e?.message ?? String(e)}</>, "error")
+        recordComponentEvent("NotesTab", "note_save_error", e?.message || String(e))
       } finally {
         onSetSavingNote(false)
       }

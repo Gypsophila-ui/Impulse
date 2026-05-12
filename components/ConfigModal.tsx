@@ -322,7 +322,6 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                 try {
                   const effectiveBaseURL = configBaseURL === "custom" ? "" : configBaseURL
                   await saveLLMConfig({
-                    provider: "openai",
                     apiKey: configApiKey.trim(),
                     model: configModel,
                     baseURL: effectiveBaseURL || undefined

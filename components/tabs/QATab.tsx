@@ -5,6 +5,7 @@ import { AlertTriangle, Bot, FileText, Sparkles } from "lucide-react"
 import type { ChatMessage, ReadingGoal } from "~types"
 import { t } from "~utils/i18n"
 import { chatWithContext } from "~utils/llm-client"
+import { recordComponentEvent } from "~utils/bug-report"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
 
 import Spinner from "../common/Spinner"
@@ -72,6 +73,7 @@ const QATab: React.FC<QATabProps> = ({
     onSetChatMessages(newMessages)
     onSetChatInput("")
     onSetChatLoading(true)
+    recordComponentEvent("QATab", "chat_send", `msgs=${newMessages.length}`)
 
     try {
       const context = chatContext || selectedText
@@ -79,9 +81,11 @@ const QATab: React.FC<QATabProps> = ({
       const updatedMessages: ChatMessage[] = [...newMessages, { role: "assistant", content: reply }]
       onSetChatMessages(updatedMessages)
       await saveChatSession(currentUrl, currentTitle, updatedMessages, context)
+      recordComponentEvent("QATab", "chat_success")
     } catch (e: any) {
       const errorMessages: ChatMessage[] = [...newMessages, { role: "assistant", content: `Error: ${e?.message ?? String(e)}` }]
       onSetChatMessages(errorMessages)
+      recordComponentEvent("QATab", "chat_error", e?.message || String(e))
     } finally {
       onSetChatLoading(false)
     }

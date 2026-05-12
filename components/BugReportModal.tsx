@@ -383,6 +383,50 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
             </div>
           ) : diagnosis ? (
             <div style={{ marginBottom: 12 }}>
+              {/* Affected Component */}
+              {diagnosis.affectedComponent && diagnosis.affectedComponent !== "Unknown" && (
+                <div
+                  style={{
+                    padding: 12,
+                    background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                    border: "1px solid #93c5fd",
+                    borderRadius: borderRadius.sm,
+                    marginBottom: 10
+                  }}>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "1px",
+                      color: "#1d4ed8",
+                      marginBottom: 6
+                    }}>
+                       Affected Component
+                    </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "3px 10px",
+                        background: "#3b82f6",
+                        color: "#fff",
+                        borderRadius: "12px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        fontFamily: "monospace"
+                      }}>
+                      {diagnosis.affectedComponent}
+                    </span>
+                    {diagnosis.affectedFile && diagnosis.affectedFile !== "unknown" && (
+                      <span style={{ fontSize: 11, color: "#6b7280", fontFamily: "monospace" }}>
+                        {diagnosis.affectedFile}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Root Cause */}
               <div
                 style={{
@@ -541,12 +585,12 @@ const BugReportModal: React.FC<BugReportModalProps> = ({
                     background: "#f9fafb",
                     borderRadius: borderRadius.sm,
                     padding: 10,
-                    fontSize: 10,
+                    fontSize: 12,
                     fontFamily: "monospace",
                     maxHeight: 160,
                     overflow: "auto",
                     border: "1px solid #e5e7eb",
-                    lineHeight: "15px",
+                    lineHeight: "18px",
                     marginBottom: 12
                   }}>
                   {summaryKeys.map((item) => (

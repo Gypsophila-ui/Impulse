@@ -4,6 +4,7 @@ import { AlertTriangle, Pencil, Sparkles, X } from "lucide-react"
 
 import type { ReadingGoal } from "~types"
 import { summarize } from "~utils/llm-client"
+import { recordComponentEvent } from "~utils/bug-report"
 
 import Spinner from "../common/Spinner"
 import ReadingGoalSelector from "../common/ReadingGoalSelector"
@@ -47,11 +48,14 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
     }
     onSetLoading(true)
     onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Generating summary...</>, "success")
+    recordComponentEvent("SummaryTab", "summarize_start", `chars=${selectedText.length}`)
     try {
       const result = await summarize(selectedText, readingGoal)
       onShowMessage(result, "success")
+      recordComponentEvent("SummaryTab", "summarize_success")
     } catch (e: any) {
       onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to generate summary:{"\n\n"}{e?.message ?? String(e)}</>, "error")
+      recordComponentEvent("SummaryTab", "summarize_error", e?.message || String(e))
     } finally {
       onSetLoading(false)
     }

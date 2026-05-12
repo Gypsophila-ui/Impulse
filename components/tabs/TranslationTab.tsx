@@ -3,6 +3,7 @@ import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle, Globe, X } from "lucide-react"
 
 import { translate } from "~utils/llm-client"
+import { recordComponentEvent } from "~utils/bug-report"
 
 import Spinner from "../common/Spinner"
 
@@ -41,11 +42,14 @@ const TranslationTab: React.FC<TranslationTabProps> = ({
     }
     onSetLoading(true)
     onShowMessage(<><Globe size={14} style={{ marginRight: 4, color: "#10b981" }} /> Translating to Chinese...</>, "success")
+    recordComponentEvent("TranslationTab", "translate_start", `chars=${selectedText.length}`)
     try {
       const result = await translate(selectedText)
       onShowMessage(result, "success")
+      recordComponentEvent("TranslationTab", "translate_success")
     } catch (e: any) {
       onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Translation failed:{"\n\n"}{e?.message ?? String(e)}</>, "error")
+      recordComponentEvent("TranslationTab", "translate_error", e?.message || String(e))
     } finally {
       onSetLoading(false)
     }

@@ -12,6 +12,13 @@ export interface LogEntry {
   timestamp: number
 }
 
+export interface ComponentEvent {
+  component: string
+  event: string
+  data?: string
+  timestamp: number
+}
+
 export interface BugReport {
   meta: {
     timestamp: string
@@ -21,7 +28,6 @@ export interface BugReport {
   }
   config: {
     hasApiKey: boolean
-    provider: string
     model: string
     baseURL: string
   }
@@ -46,6 +52,7 @@ export interface BugReport {
   }
   console: LogEntry[]
   errors: string[]
+  componentEvents: ComponentEvent[]
   pageInfo?: Record<string, unknown>
   userDescription: string
   codeContext?: CodeContext
@@ -136,6 +143,22 @@ export function getErrorHistory(): string[] {
   return [...errorHistory]
 }
 
+// ─── Component Event Tracking ───────────────────────────────────────────────
+
+const MAX_COMPONENT_EVENTS = 100
+let componentEventBuffer: ComponentEvent[] = []
+
+export function recordComponentEvent(component: string, event: string, data?: string): void {
+  componentEventBuffer.push({ component, event, data, timestamp: Date.now() })
+  if (componentEventBuffer.length > MAX_COMPONENT_EVENTS) {
+    componentEventBuffer = componentEventBuffer.slice(-MAX_COMPONENT_EVENTS)
+  }
+}
+
+export function getComponentEvents(): ComponentEvent[] {
+  return [...componentEventBuffer]
+}
+
 // ─── Collect ────────────────────────────────────────────────────────────────
 
 export interface CollectBugReportParams {
@@ -191,7 +214,6 @@ export async function collectBugReport(params: CollectBugReportParams): Promise<
     },
     config: {
       hasApiKey: Boolean(config?.apiKey),
-      provider: config?.provider || "openai",
       model: config?.model || "unknown",
       baseURL: maskedBaseURL
     },
@@ -216,6 +238,7 @@ export async function collectBugReport(params: CollectBugReportParams): Promise<
     },
     console: consoleBuffer,
     errors: errorHistory,
+    componentEvents: getComponentEvents(),
     pageInfo: params.pageInfo,
     userDescription: params.userDescription,
     codeContext
@@ -237,7 +260,6 @@ export function formatBugReportAsMarkdown(report: BugReport): string {
 
   lines.push("## Configuration")
   lines.push(`- API Key configured: ${report.config.hasApiKey ? "Yes" : "No"}`)
-  lines.push(`- Provider: ${report.config.provider}`)
   lines.push(`- Model: ${report.config.model}`)
   if (report.config.baseURL) lines.push(`- Base URL: ${report.config.baseURL}`)
   lines.push("")
@@ -271,6 +293,17 @@ export function formatBugReportAsMarkdown(report: BugReport): string {
     lines.push("## Captured Errors")
     for (const err of report.errors) {
       lines.push(`- ${err}`)
+    }
+    lines.push("")
+  }
+
+  if (report.componentEvents && report.componentEvents.length > 0) {
+    lines.push("## Component Activity Log")
+    lines.push("")
+    const recentEvents = report.componentEvents.slice(-50)
+    for (const event of recentEvents) {
+      const time = new Date(event.timestamp).toISOString().slice(11, 23)
+      lines.push(`- \`[${time}]\` **${event.component}** — ${event.event}${event.data ? ` (${event.data})` : ""}`)
     }
     lines.push("")
   }
@@ -326,6 +359,8 @@ export interface DiagnosisResult {
   suggestedFix: string
   autoFixAction: "clear_data" | "reset_config" | "retry" | "switch_model" | "none"
   autoFixParams: Record<string, unknown>
+  affectedComponent: string
+  affectedFile: string
 }
 
 export async function diagnoseWithAI(report: BugReport): Promise<DiagnosisResult> {
@@ -335,7 +370,9 @@ export async function diagnoseWithAI(report: BugReport): Promise<DiagnosisResult
       rootCause: "Cannot run AI diagnosis: no API key configured.",
       suggestedFix: "Please configure your API key in Settings first, then re-run diagnosis.",
       autoFixAction: "none",
-      autoFixParams: {}
+      autoFixParams: {},
+      affectedComponent: "ConfigModal",
+      affectedFile: "components/ConfigModal.tsx"
     }
   }
 
@@ -351,7 +388,13 @@ export async function diagnoseWithAI(report: BugReport): Promise<DiagnosisResult
     .join("\n")
 
   const errorSummary = report.errors.slice(-10).join("\n")
-  
+
+  const componentEventsSummary = report.componentEvents?.length
+    ? report.componentEvents.slice(-30)
+        .map((e) => `[${e.component}] ${e.event}${e.data ? ` — ${e.data}` : ""}`)
+        .join("\n")
+    : ""
+
   let codeContextSection = ""
   if (report.codeContext && report.codeContext.snippets.length > 0) {
     codeContextSection = formatCodeContextForAI(report.codeContext)
@@ -369,7 +412,6 @@ export async function diagnoseWithAI(report: BugReport): Promise<DiagnosisResult
 
 ## Configuration
 - API Key configured: ${report.config.hasApiKey ? "Yes" : "No"}
-- Provider: ${report.config.provider}
 - Model: ${report.config.model}
 - Base URL: ${report.config.baseURL || "(default)"}
 
@@ -386,6 +428,9 @@ export async function diagnoseWithAI(report: BugReport): Promise<DiagnosisResult
 
 ## Captured Errors
 ${errorSummary || "(none)"}
+
+## Component Activity Log (recent events)
+${componentEventsSummary || "(none)"}
 
 ${codeContextSection}
 
@@ -404,6 +449,16 @@ Analyze the above information and return ONLY a valid JSON object with these fie
 - suggestedFix: Specific steps to fix the issue (1-3 sentences)
 - autoFixAction: One of "clear_data", "reset_config", "retry", "switch_model", or "none" — choose the most appropriate automated fix action, or "none" if the fix requires manual intervention
 - autoFixParams: An object with any parameters needed for the auto-fix action (empty object if action is "none")
+- affectedComponent: The name of the React component most likely causing the issue. Use one of: "SummaryTab", "TranslationTab", "HighlightTab", "NotesTab", "QATab", "AgentView", "ConfigModal", "BugReportModal", "MetadataCard", "Header", "ErrorAlert", "ContentArea", "Sidepanel", "ContentScript", "Background", "llm-client", "storage", or "Unknown" if unclear.
+- affectedFile: The most likely source file path (e.g. "components/tabs/SummaryTab.tsx", "utils/llm-client.ts", "contents/highlight.ts"). Use "unknown" if unclear.
+
+How to determine affectedComponent:
+- Look at the Active Tab — the issue is usually in the currently active tab's component
+- Check the Code Context file paths — they point directly to the failing code
+- Check the Component Activity Log for the last component that emitted events before errors
+- Error messages mentioning specific API calls (summarize/translate/generateHighlights) indicate llm-client issues
+- Content script errors (getSelection, highlight) indicate ContentScript issues
+- Storage errors (get/set/delete) indicate storage utility issues
 
 Choose autoFixAction based on:
 - "clear_data" if storage data appears corrupted or is causing issues
@@ -431,14 +486,18 @@ Return ONLY the JSON, no other text.`
       autoFixAction: ["clear_data", "reset_config", "retry", "switch_model", "none"].includes(parsed.autoFixAction)
         ? parsed.autoFixAction
         : "none",
-      autoFixParams: parsed.autoFixParams || {}
+      autoFixParams: parsed.autoFixParams || {},
+      affectedComponent: parsed.affectedComponent || "Unknown",
+      affectedFile: parsed.affectedFile || "unknown"
     }
   } catch (e: any) {
     return {
       rootCause: `AI diagnosis failed: ${e?.message || String(e)}`,
       suggestedFix: "The diagnosis service is currently unavailable. You can still download the bug report JSON and share it for manual review.",
       autoFixAction: "none",
-      autoFixParams: {}
+      autoFixParams: {},
+      affectedComponent: "Unknown",
+      affectedFile: "unknown"
     }
   }
 }
