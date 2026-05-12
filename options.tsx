@@ -395,7 +395,7 @@ export default function Options() {
           </div>
 
           {/* Language & Theme */}
-          <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+          <div style={{ display: "none", gap: 16, marginBottom: 24 }}>
             <div style={{ flex: 1 }}>
               <label
                 style={{
