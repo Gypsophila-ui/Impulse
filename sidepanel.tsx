@@ -46,7 +46,7 @@ import {
   type Note
 } from "./utils/storage"
 
-import { startConsoleInterception, stopConsoleInterception } from "./utils/bug-report"
+import { recordComponentEvent, startConsoleInterception, stopConsoleInterception } from "./utils/bug-report"
 import type { DiagnosisResult } from "./utils/bug-report"
 
 import type { AppMode, TabKey } from "./components/common/Header"
@@ -374,6 +374,15 @@ export default function Sidepanel() {
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [metadata, notes, highlights, chatMessages, currentTitle])
+
+  // Track component events for bug diagnosis
+  useEffect(() => {
+    recordComponentEvent("Sidepanel", "tab_switch", activeTab)
+  }, [activeTab])
+
+  useEffect(() => {
+    recordComponentEvent("Sidepanel", "mode_switch", mode)
+  }, [mode])
 
   useEffect(() => {
     const handleQuickAction = async (message: any) => {
