@@ -5,10 +5,10 @@ import type { AgentChatResult, AgentStatusCallback, ChatMessage, ComparisonDimen
 import {
   executeToolCall,
   formatToolResultForLLM,
-  PAPER_TOOLS,
   type ToolExecutionContext,
   type ToolResult
 } from "~utils/agent-tools"
+import { PAPER_TOOLS, getToolPrompt } from "~utils/tool-definitions"
 import { getLLMConfig } from "~utils/storage"
 
 let openaiClient: OpenAI | null = null
@@ -320,64 +320,7 @@ export async function agentChat(
 
 # 可用工具说明
 
-## 笔记管理
-- **save_note**(comment: string)
-  保存一条阅读笔记，关联当前选中的文本
-  使用场景：用户说"记录这个"、"保存笔记"、"帮我记下来"
-
-- **get_notes**()
-  获取当前页面的所有已保存笔记
-  使用场景：用户问"我之前记了什么"、"查看笔记"
-
-- **search_notes**(query: string)
-  在所有笔记中搜索包含关键词的内容
-  使用场景：用户说"找一下关于XX的笔记"
-
-## 高亮管理
-- **apply_highlight**(phrases: string[])
-  将指定短语在页面上高亮显示并保存
-  使用场景：用户说"高亮这段的关键词"、"标记重点"
-
-- **get_highlights**()
-  获取当前页面的所有高亮记录
-  使用场景：用户问"我高亮了哪些内容"
-
-## 内容处理
-- **summarize_selection**()
-  对当前选中文本生成摘要
-  使用场景：用户说"总结一下"、"这段讲了什么"
-
-- **translate_selection**(target_language?: string)
-  翻译当前选中文本（默认翻译为中文）
-  使用场景：用户说"翻译这段"、"这句话什么意思"
-
-- **extract_paper_metadata**()
-  从当前选中文本提取论文元数据（标题、作者、年份等）
-  使用场景：用户说"提取论文信息"、"这篇论文的作者是谁"
-
-## 交互工具
-- **ask_user_question**(question: string, options: {label, description}[], allowCustomInput?: boolean, placeholder?: string)
-  向用户提问并获取回答，用于澄清需求、确认操作、获取偏好设置
-  使用场景：需要用户做选择、确认操作、提供额外信息时
-  示例：ask_user_question("您希望保存为哪种类型的笔记？", [{label: "方法", description: "论文方法相关"}, {label: "结论", description: "论文结论相关"}])
-
-## 论文对比工具
-- **list_candidate_papers**(limit?: number)
-  列出所有可对比的论文候选（有笔记/高亮/元数据的论文），按最近阅读排序
-  使用场景：用户说"帮我对比论文"但未指定论文、或问"我读过哪些论文"
-
-- **get_paper_summary**(url: string)
-  获取指定论文的结构化摘要（元数据、笔记、高亮、上下文预览）
-  使用场景：对比前了解某篇论文的具体内容
-
-- **compare_papers**(paper_urls: string[], dimensions?: string[], focus?: string)
-  对多篇论文进行结构化对比，生成对比表格和总结。对比前需先确认用户选择了哪些论文和维度
-  使用场景：用户说"对比这几篇"、"帮我找出这两篇的异同"、"哪篇方法更好"
-  dimensions 可选：contribution / method / experiment / limitation / novelty / practical_value
-
-- **save_comparison**(title: string, comparison_json: string)
-  将 compare_papers 返回的对比结果保存到本地
-  使用场景：用户说"保存这次对比"，或对比完成后主动询问用户是否保存
+${getToolPrompt()}
 ${summarySection}
 
 # 当前上下文

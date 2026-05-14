@@ -1,6 +1,4 @@
-import type { ChatCompletionTool } from "openai/resources/chat/completions"
-
-import type { AskUserQuestionCallback, ComparisonDimension, ComparisonResult, PaperMetadata, PaperSnapshot } from "~types"
+import type { AskUserQuestionCallback, ComparisonDimension, ComparisonResult, PaperSnapshot } from "~types"
 import {
   getHighlightsByUrl,
   getNotesByUrl,
@@ -8,9 +6,7 @@ import {
   listCandidatePapers,
   saveComparison,
   saveHighlights,
-  saveNote,
-  type Highlight,
-  type Note
+  saveNote
 } from "~utils/storage"
 import {
   extractMetadata,
@@ -18,7 +14,6 @@ import {
   summarize,
   translate
 } from "~utils/llm-client"
-
 export interface ToolExecutionContext {
   selectedText: string
   paperText: string
@@ -40,266 +35,8 @@ export type ToolExecutionCallback = (
   toolName: string
 ) => void
 
-export const PAPER_TOOLS: ChatCompletionTool[] = [
-  {
-    type: "function",
-    function: {
-      name: "save_note",
-      description:
-        "保存一条阅读笔记，关联当前选中的文本或论文全文。当用户想要记录、保存、存储某个观点或内容时使用。如果没有选中文本，会自动使用论文全文作为上下文。",
-      parameters: {
-        type: "object",
-        properties: {
-          comment: {
-            type: "string",
-            description: "笔记内容/评论/感想"
-          }
-        },
-        required: ["comment"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_notes",
-      description:
-        "获取当前页面的所有已保存笔记。当用户想查看、浏览、列出笔记时使用。",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "apply_highlight",
-      description:
-        "将指定短语在页面上高亮显示并保存。当用户想要高亮、标记、强调某些关键内容时使用。",
-      parameters: {
-        type: "object",
-        properties: {
-          phrases: {
-            type: "array",
-            items: { type: "string" },
-            description: "要高亮的短语列表，每个短语应该是文本中的精确匹配"
-          }
-        },
-        required: ["phrases"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_highlights",
-      description:
-        "获取当前页面的所有高亮记录。当用户想查看、浏览、列出高亮内容时使用。",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "summarize_selection",
-      description:
-        "对当前选中文本生成摘要。当用户想要总结、概括、提炼选中文本的主要内容时使用。",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "translate_selection",
-      description:
-        "翻译当前选中文本。当用户想要翻译、转换语言时使用。",
-      parameters: {
-        type: "object",
-        properties: {
-          target_language: {
-            type: "string",
-            description: "目标语言，如'中文'、'英文'、'日文'等，默认为中文"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "extract_paper_metadata",
-      description:
-        "从当前选中文本提取论文元数据（标题、作者、年份等）。当用户想要获取论文信息、引用信息时使用。",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_notes",
-      description:
-        "在已保存笔记中搜索包含关键词的内容。当用户想要查找、搜索、检索笔记时使用。",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "搜索关键词"
-          }
-        },
-        required: ["query"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "ask_user_question",
-      description:
-        "向用户提问并获取回答。当需要用户做出选择、确认操作、提供偏好设置或澄清模糊需求时使用。可以提供预设选项供用户选择，也可以允许用户自定义输入。",
-      parameters: {
-        type: "object",
-        properties: {
-          question: {
-            type: "string",
-            description: "要向用户提出的问题"
-          },
-          options: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                label: {
-                  type: "string",
-                  description: "选项标签"
-                },
-                description: {
-                  type: "string",
-                  description: "选项描述（可选）"
-                }
-              },
-              required: ["label"]
-            },
-            description: "预设选项列表，建议提供2-4个选项"
-          },
-          allow_custom_input: {
-            type: "boolean",
-            description: "是否允许用户自定义输入，默认为false"
-          },
-          placeholder: {
-            type: "string",
-            description: "自定义输入框的占位符文本"
-          }
-        },
-        required: ["question", "options"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_candidate_papers",
-      description:
-        "列出所有可用于对比的论文候选，包括当前论文和历史阅读过的论文。当用户想比较论文、或需要了解有哪些论文可供分析时使用。",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: {
-            type: "number",
-            description: "最多返回多少篇论文，默认为 10"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_paper_summary",
-      description:
-        "获取指定论文的结构化摘要，包括元数据、笔记、高亮和上下文预览。用于在对比前了解某篇论文的核心内容。",
-      parameters: {
-        type: "object",
-        properties: {
-          url: {
-            type: "string",
-            description: "论文的 URL"
-          }
-        },
-        required: ["url"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "compare_papers",
-      description:
-        "对比多篇论文，生成结构化的对比表格和总结。当用户想了解论文间的异同、找出各自优缺点或决定读哪篇时使用。",
-      parameters: {
-        type: "object",
-        properties: {
-          paper_urls: {
-            type: "array",
-            items: { type: "string" },
-            description: "要对比的论文 URL 列表（2-5 篇）"
-          },
-          dimensions: {
-            type: "array",
-            items: {
-              type: "string",
-              enum: ["contribution", "method", "experiment", "limitation", "novelty", "practical_value"]
-            },
-            description: "对比维度，默认为 contribution、method、experiment、limitation"
-          },
-          focus: {
-            type: "string",
-            description: "对比的重点或用户具体关心的问题，帮助生成更有针对性的分析"
-          }
-        },
-        required: ["paper_urls"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "save_comparison",
-      description:
-        "将对比结果保存到本地，方便后续查阅。在生成对比结果后，如用户希望保存，则调用此工具。",
-      parameters: {
-        type: "object",
-        properties: {
-          title: {
-            type: "string",
-            description: "对比任务的标题，例如'Transformer vs BERT 方法对比'"
-          },
-          comparison_json: {
-            type: "string",
-            description: "compare_papers 返回的 ComparisonResult JSON 字符串"
-          }
-        },
-        required: ["title", "comparison_json"]
-      }
-    }
-  }
-]
+// PAPER_TOOLS and getToolNames are now defined in utils/tool-definitions.ts
+export { PAPER_TOOLS, getToolNames } from "~utils/tool-definitions"
 
 async function applyHighlightsToPage(
   tabId: number,
@@ -690,13 +427,4 @@ export function formatToolResultForLLM(result: ToolResult): string {
     return JSON.stringify(result.data, null, 2)
   }
   return `Error: ${result.error || result.message}`
-}
-
-export function getToolNames(): string[] {
-  return PAPER_TOOLS.map((t) => {
-    if (t.type === "function") {
-      return t.function.name
-    }
-    return ""
-  }).filter(Boolean)
 }
