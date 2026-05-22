@@ -2,6 +2,7 @@ import React from "react"
 import { borderRadius } from "~utils/design-tokens"
 import { AlertTriangle, Sparkles, Trash2, X } from "lucide-react"
 
+import { applyHighlightsToPage, clearHighlightsOnPage } from "~utils/agent-tools"
 import type { Highlight } from "~utils/storage"
 import { deleteHighlight, deleteHighlightsByUrl, saveHighlights } from "~utils/storage"
 import { recordComponentEvent } from "~utils/bug-report"
@@ -50,23 +51,19 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
 }) => {
   const canUseSelection = selectedText.trim().length > 0
 
-  const applyHighlightsToPage = async (phrases: string[]) => {
+  const applyPageHighlights = async (phrases: string[]) => {
     if (!currentTabId) return
 
     try {
       onSetApplyingHighlights(true)
 
-      const response = await chrome.tabs.sendMessage(currentTabId, {
-        type: "APPLY_HIGHLIGHTS",
-        phrases,
-        color: "#fef08a"
-      })
+      const result = await applyHighlightsToPage(currentTabId, phrases)
 
-      if (response?.success) {
-        onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Applied {response.count} highlights on the page!</>, "success")
+      if (result.success) {
+        onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Applied {result.count} sentence highlights on the page!</>, "success")
         setTimeout(() => onClearMessage(), 3000)
       } else {
-        onShowMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> {response?.error || "Failed to apply highlights"}</>, "warning")
+        onShowMessage(<><AlertTriangle size={14} style={{ marginRight: 4, color: "#f59e0b" }} /> {result.error || "Failed to apply highlights"}</>, "warning")
       }
     } catch (e: any) {
       onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to apply highlights: {e?.message ?? String(e)}</>, "error")
@@ -75,16 +72,9 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
     }
   }
 
-  const clearHighlightsFromPage = async () => {
+  const clearPageHighlights = async () => {
     if (!currentTabId) return
-
-    try {
-      await chrome.tabs.sendMessage(currentTabId, {
-        type: "CLEAR_HIGHLIGHTS"
-      })
-    } catch (e) {
-      console.error("Failed to clear highlights:", e)
-    }
+    await clearHighlightsOnPage(currentTabId)
   }
 
   const formatDate = (timestamp: number) => {
@@ -108,7 +98,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
         currentTitle
       )
 
-      await applyHighlightsToPage([selectedText])
+      await applyPageHighlights([selectedText])
 
       await onLoadHighlights()
 
@@ -129,9 +119,9 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
         await onLoadHighlights()
         const remaining = highlights.filter((h) => h.id !== highlight.id)
         if (remaining.length > 0) {
-          await applyHighlightsToPage(remaining.map((h) => h.phrase))
+          await applyPageHighlights(remaining.map((h) => h.phrase))
         } else {
-          await clearHighlightsFromPage()
+          await clearPageHighlights()
         }
         onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Highlight deleted</>, "success")
         setTimeout(() => onClearMessage(), 2000)
@@ -145,7 +135,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
     if (confirm(`Delete all ${highlights.length} highlights for this page?`)) {
       try {
         await deleteHighlightsByUrl(currentUrl)
-        await clearHighlightsFromPage()
+        await clearPageHighlights()
         await onLoadHighlights()
         onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> All highlights deleted</>, "success")
         setTimeout(() => onClearMessage(), 2000)
@@ -156,9 +146,9 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
   }
 
   const handleReapply = async () => {
-    await clearHighlightsFromPage()
+    await clearPageHighlights()
     if (highlights.length > 0) {
-      await applyHighlightsToPage(highlights.map((h) => h.phrase))
+      await applyPageHighlights(highlights.map((h) => h.phrase))
     }
     onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Cleared highlights from page</>, "success")
     setTimeout(() => onClearMessage(), 2000)

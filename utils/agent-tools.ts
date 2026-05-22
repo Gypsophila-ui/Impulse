@@ -38,24 +38,150 @@ export type ToolExecutionCallback = (
 // PAPER_TOOLS and getToolNames are now defined in utils/tool-definitions.ts
 export { PAPER_TOOLS, getToolNames } from "~utils/tool-definitions"
 
-async function applyHighlightsToPage(
+// ─── Standalone functions for chrome.scripting.executeScript ──────────────────
+// These must be self-contained (no external references) to be serializable.
+
+function injectHighlightSentences(phrases: string[]): number {
+  const HIGHLIGHT_CLASS = "impulse-sentence-hl"
+  const COLORS = ["#fef08a", "#bfdbfe", "#bbf7d0", "#fecaca", "#ddd6fe", "#fed7aa"]
+
+  // Clear existing highlights
+  const existing = document.querySelectorAll("." + HIGHLIGHT_CLASS)
+  for (let i = 0; i < existing.length; i++) {
+    const el = existing[i] as HTMLElement
+    const p = el.parentNode
+    if (p) {
+      p.replaceChild(document.createTextNode(el.textContent || ""), el)
+    }
+  }
+  document.body.normalize()
+
+  function isSkippable(el: Element | null): boolean {
+    if (!el) return true
+    const tag = el.tagName
+    if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "MARK") return true
+    if (el.classList.contains(HIGHLIGHT_CLASS)) return true
+    return false
+  }
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      return isSkippable((node as Text).parentElement) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+    }
+  })
+
+  const textNodes: Text[] = []
+  let n: Node | null
+  while ((n = walker.nextNode())) {
+    textNodes.push(n as Text)
+  }
+
+  let count = 0
+  const lowerPhrases = phrases.map((p) => p.toLowerCase())
+
+  for (let i = 0; i < textNodes.length; i++) {
+    const textNode = textNodes[i]
+    const text = textNode.textContent || ""
+    if (!text.trim()) continue
+
+    const sentences: { text: string; highlight: boolean; colorIdx: number }[] = []
+    const sentenceRegex = /[^.!?\n]+[.!?]*\n*/g
+    let m: RegExpExecArray | null
+    while ((m = sentenceRegex.exec(text)) !== null) {
+      const sentenceText = m[0]
+      const lowerSentence = sentenceText.toLowerCase()
+      let highlight = false
+      let colorIdx = -1
+      for (let p = 0; p < lowerPhrases.length; p++) {
+        if (lowerSentence.indexOf(lowerPhrases[p]) !== -1) {
+          highlight = true
+          colorIdx = p
+          break
+        }
+      }
+      sentences.push({ text: sentenceText, highlight, colorIdx })
+    }
+
+    if (sentences.length === 0) continue
+
+    let hasMatch = false
+    for (let s = 0; s < sentences.length; s++) {
+      if (sentences[s].highlight) { hasMatch = true; break }
+    }
+    if (!hasMatch) continue
+
+    const parent = textNode.parentNode
+    if (!parent) continue
+
+    const fragment = document.createDocumentFragment()
+    for (let s = 0; s < sentences.length; s++) {
+      const sent = sentences[s]
+      if (sent.highlight) {
+        const span = document.createElement("span")
+        span.className = HIGHLIGHT_CLASS
+        span.style.backgroundColor = COLORS[sent.colorIdx % COLORS.length]
+        span.style.padding = "2px 4px"
+        span.style.borderRadius = "3px"
+        span.textContent = sent.text
+        fragment.appendChild(span)
+        count++
+      } else {
+        fragment.appendChild(document.createTextNode(sent.text))
+      }
+    }
+
+    parent.replaceChild(fragment, textNode)
+  }
+
+  return count
+}
+
+function injectClearHighlights(): void {
+  const HIGHLIGHT_CLASS = "impulse-sentence-hl"
+  const existing = document.querySelectorAll("." + HIGHLIGHT_CLASS)
+  for (let i = 0; i < existing.length; i++) {
+    const el = existing[i] as HTMLElement
+    const p = el.parentNode
+    if (p) {
+      p.replaceChild(document.createTextNode(el.textContent || ""), el)
+    }
+  }
+}
+
+export async function applyHighlightsToPage(
   tabId: number,
   phrases: string[]
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
-    const response = await chrome.tabs.sendMessage(tabId, {
-      type: "APPLY_HIGHLIGHTS",
-      phrases,
-      color: "#fef08a"
+    const results = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: injectHighlightSentences,
+      args: [phrases]
     })
-    return response
-  } catch (e: any) {
-    // 处理 "Could not establish connection" 错误
-    const errorMsg = e?.message ?? String(e)
-    if (errorMsg.includes("Could not establish connection") || errorMsg.includes("Receiving end does not exist")) {
-      return { success: false, count: 0, error: "内容脚本尚未加载完成，请稍后重试" }
+
+    let totalCount = 0
+    for (const r of results) {
+      if (typeof r.result === "number") totalCount += r.result
     }
+
+    if (totalCount === 0) {
+      return { success: false, count: 0, error: "指定短语未在页面中找到" }
+    }
+    return { success: true, count: totalCount }
+  } catch (e: any) {
+    const errorMsg = e?.message ?? String(e)
     return { success: false, count: 0, error: errorMsg }
+  }
+}
+
+export async function clearHighlightsOnPage(tabId: number): Promise<void> {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: injectClearHighlights
+    })
+  } catch (e) {
+    console.error("Failed to clear highlights:", e)
   }
 }
 
@@ -147,14 +273,9 @@ export async function executeToolCall(
             data: { count: result.count, phrases: validPhrases.slice(0, result.count) },
             message: `已高亮 ${result.count} 个短语${note}`
           }
-        } else if (result.count === 0) {
-          return {
-            success: false,
-            error: "短语未在页面中找到",
-            message: "高亮失败：指定短语未在页面中找到，请确保短语与页面内容精确匹配"
-          }
         } else {
-          return { success: false, error: result.error, message: `高亮失败：${result.error}` }
+          const errMsg = result.error || "短语未在页面中找到"
+          return { success: false, error: errMsg, message: `高亮失败：${errMsg}` }
         }
       } catch (e: any) {
         return { success: false, error: e?.message, message: `高亮失败：${e?.message ?? String(e)}` }

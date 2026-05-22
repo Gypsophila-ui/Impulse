@@ -96,6 +96,14 @@ export type Theme = "light" | "dark"
 // Language
 export type Language = "en" | "zh"
 
+// Skill — slash-command shortcut for Agent chat input
+export interface Skill {
+  trigger: string
+  label: string
+  description: string
+  prompt: string
+}
+
 // Reading Goal - 阅读目标设定
 export type ReadingGoal = "understand_method" | "find_details" | "evaluate_novelty" | "prepare_citation"
 

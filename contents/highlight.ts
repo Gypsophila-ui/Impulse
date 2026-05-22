@@ -6,127 +6,132 @@ export const config: PlasmoCSConfig = {
   all_frames: true
 }
 
-// Track highlighted elements to enable cleanup
-const highlightedElements: HTMLElement[] = []
+const HIGHLIGHT_CLASS = "impulse-sentence-hl"
+const COLORS = ["#fef08a", "#bfdbfe", "#bbf7d0", "#fecaca", "#ddd6fe", "#fed7aa"]
 
-/**
- * Apply highlight to text in the page
- */
-function highlightText(phrase: string, color: string = "#fef08a"): number {
-  let count = 0
+function injectSentenceHighlights(phrases: string[]): number {
+  // Clear existing highlights
+  const existing = document.querySelectorAll("." + HIGHLIGHT_CLASS)
+  for (let i = 0; i < existing.length; i++) {
+    const el = existing[i] as HTMLElement
+    const p = el.parentNode
+    if (p) {
+      p.replaceChild(document.createTextNode(el.textContent || ""), el)
+    }
+  }
+  document.body.normalize()
 
-  // Create a TreeWalker to find all text nodes
+  function isSkippable(el: Element | null): boolean {
+    if (!el) return true
+    const tag = el.tagName
+    if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "MARK") return true
+    if (el.classList.contains(HIGHLIGHT_CLASS)) return true
+    return false
+  }
+
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
-      // Skip script, style, and already highlighted elements
-      const parent = node.parentElement
-      if (!parent) return NodeFilter.FILTER_REJECT
-      if (["SCRIPT", "STYLE", "NOSCRIPT"].includes(parent.tagName)) {
-        return NodeFilter.FILTER_REJECT
-      }
-      if (parent.classList.contains("impulse-highlight")) {
-        return NodeFilter.FILTER_REJECT
-      }
-      return NodeFilter.FILTER_ACCEPT
+      return isSkippable((node as Text).parentElement) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
     }
   })
 
-  const textNodes: Node[] = []
-  let node: Node | null
-  while ((node = walker.nextNode())) {
-    textNodes.push(node)
+  const textNodes: Text[] = []
+  let n: Node | null
+  while ((n = walker.nextNode())) {
+    textNodes.push(n as Text)
   }
 
-  // Highlight matching text in each text node
-  textNodes.forEach((textNode) => {
+  let count = 0
+  const lowerPhrases = phrases.map((p) => p.toLowerCase())
+
+  for (let i = 0; i < textNodes.length; i++) {
+    const textNode = textNodes[i]
     const text = textNode.textContent || ""
-    const lowerText = text.toLowerCase()
-    const lowerPhrase = phrase.toLowerCase()
+    if (!text.trim()) continue
 
-    let index = lowerText.indexOf(lowerPhrase)
-    if (index === -1) return
-
-    // Create highlighted version
-    const parent = textNode.parentNode
-    if (!parent) return
-
-    const fragment = document.createDocumentFragment()
-    let lastIndex = 0
-
-    while (index !== -1) {
-      // Add text before match
-      if (index > lastIndex) {
-        fragment.appendChild(document.createTextNode(text.substring(lastIndex, index)))
+    const sentences: { text: string; highlight: boolean; colorIdx: number }[] = []
+    const sentenceRegex = /[^.!?\n]+[.!?]*\n*/g
+    let m: RegExpExecArray | null
+    while ((m = sentenceRegex.exec(text)) !== null) {
+      const sentenceText = m[0]
+      const lowerSentence = sentenceText.toLowerCase()
+      let highlight = false
+      let colorIdx = -1
+      for (let p = 0; p < lowerPhrases.length; p++) {
+        if (lowerSentence.indexOf(lowerPhrases[p]) !== -1) {
+          highlight = true
+          colorIdx = p
+          break
+        }
       }
-
-      // Add highlighted match
-      const mark = document.createElement("mark")
-      mark.className = "impulse-highlight"
-      mark.style.backgroundColor = color
-      mark.style.padding = "2px 0"
-      mark.style.borderRadius = "2px"
-      mark.textContent = text.substring(index, index + phrase.length)
-      fragment.appendChild(mark)
-      highlightedElements.push(mark)
-      count++
-
-      lastIndex = index + phrase.length
-      index = lowerText.indexOf(lowerPhrase, lastIndex)
+      sentences.push({ text: sentenceText, highlight, colorIdx })
     }
 
-    // Add remaining text
-    if (lastIndex < text.length) {
-      fragment.appendChild(document.createTextNode(text.substring(lastIndex)))
+    if (sentences.length === 0) continue
+
+    let hasMatch = false
+    for (let s = 0; s < sentences.length; s++) {
+      if (sentences[s].highlight) { hasMatch = true; break }
+    }
+    if (!hasMatch) continue
+
+    const parent = textNode.parentNode
+    if (!parent) continue
+
+    const fragment = document.createDocumentFragment()
+    for (let s = 0; s < sentences.length; s++) {
+      const sent = sentences[s]
+      if (sent.highlight) {
+        const span = document.createElement("span")
+        span.className = HIGHLIGHT_CLASS
+        span.style.backgroundColor = COLORS[sent.colorIdx % COLORS.length]
+        span.style.padding = "2px 4px"
+        span.style.borderRadius = "3px"
+        span.textContent = sent.text
+        fragment.appendChild(span)
+        count++
+      } else {
+        fragment.appendChild(document.createTextNode(sent.text))
+      }
     }
 
     parent.replaceChild(fragment, textNode)
-  })
+  }
 
   return count
 }
 
-/**
- * Remove all highlights from the page
- */
-function clearHighlights(): void {
-  highlightedElements.forEach((element) => {
-    const parent = element.parentNode
-    if (parent) {
-      const textNode = document.createTextNode(element.textContent || "")
-      parent.replaceChild(textNode, element)
+function clearSentenceHighlights(): void {
+  const existing = document.querySelectorAll("." + HIGHLIGHT_CLASS)
+  for (let i = 0; i < existing.length; i++) {
+    const el = existing[i] as HTMLElement
+    const p = el.parentNode
+    if (p) {
+      p.replaceChild(document.createTextNode(el.textContent || ""), el)
     }
-  })
-  highlightedElements.length = 0
+  }
 }
 
-// Listen for messages from sidepanel
+// Listen for messages from sidepanel (backward compatibility)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "APPLY_HIGHLIGHTS") {
     try {
-      clearHighlights()
       const phrases = message.phrases as string[]
-      const color = message.color || "#fef08a"
-      let totalCount = 0
-
-      phrases.forEach((phrase) => {
-        const count = highlightText(phrase, color)
-        totalCount += count
-      })
-
-      sendResponse({ success: true, count: totalCount })
+      const totalCount = injectSentenceHighlights(phrases)
+      sendResponse({ success: totalCount > 0, count: totalCount })
     } catch (e: any) {
       sendResponse({ success: false, error: e?.message ?? String(e) })
     }
   } else if (message.type === "CLEAR_HIGHLIGHTS") {
     try {
-      clearHighlights()
+      clearSentenceHighlights()
       sendResponse({ success: true })
     } catch (e: any) {
       sendResponse({ success: false, error: e?.message ?? String(e) })
     }
   }
 
-  return true // Keep the message channel open for async response
+  return true
 })
 
 export {}

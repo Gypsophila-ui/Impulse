@@ -9,7 +9,7 @@ import "katex/dist/katex.min.css"
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal } from "~types"
 import { type ToolExecutionContext } from "~utils/agent-tools"
 import { borderRadius, shadows, transitions } from "~utils/design-tokens"
-import { searchSkills, type Skill } from "~utils/skills"
+import { searchSkills, SKILLS, type Skill } from "~utils/skills"
 import { agentChat } from "~utils/llm-client"
 import { extractPdfText, isPdfUrl, processPdfBuffer } from "~utils/pdf-extractor"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
@@ -571,11 +571,22 @@ const AgentView: React.FC<AgentViewProps> = ({
   }, [])
 
   const applySkill = useCallback((skill: Skill) => {
-    onSetChatInput(skill.prompt)
+    onSetChatInput(`/${skill.trigger} `)
     closeSkillMenu()
     // Focus input after selection
     setTimeout(() => inputRef.current?.focus(), 0)
   }, [onSetChatInput, closeSkillMenu])
+
+  const resolveSkillInput = useCallback((input: string): string => {
+    const trimmed = input.trim()
+    if (!trimmed.startsWith("/")) return trimmed
+    const parts = trimmed.split(/\s+/)
+    const trigger = parts[0].slice(1).toLowerCase()
+    const skill = SKILLS.find((s) => s.trigger === trigger)
+    if (!skill) return trimmed
+    const extra = parts.slice(1).join(" ")
+    return extra ? `${skill.prompt}\n\n${extra}` : skill.prompt
+  }, [])
 
   const handleInputChange = useCallback((value: string) => {
     onSetChatInput(value)
@@ -680,8 +691,9 @@ const AgentView: React.FC<AgentViewProps> = ({
   }, [onScrollChange])
 
   const handleSendChat = async (overrideInput?: string) => {
-    const input = (overrideInput ?? chatInput).trim()
-    if (!input || chatLoading) return
+    const rawInput = (overrideInput ?? chatInput).trim()
+    if (!rawInput || chatLoading) return
+    const input = resolveSkillInput(rawInput)
 
     if (!hasKey) {
       onShowMessage(
