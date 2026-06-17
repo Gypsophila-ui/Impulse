@@ -5,6 +5,7 @@ import { AlertTriangle, FileText, MessageSquare, Pencil, Save, Sparkles, Trash2,
 import type { Note } from "~utils/storage"
 import { deleteNote, saveNote, updateNote } from "~utils/storage"
 import { recordComponentEvent } from "~utils/bug-report"
+import { trackEvent } from "~utils/reading-tracker"
 
 import Spinner from "../common/Spinner"
 
@@ -66,6 +67,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
         onSetEditingNoteId(null)
         await onLoadNotes()
         onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Note updated successfully!</>, "success")
+        trackEvent("note", { action: "update", id: editingNoteId })
         setTimeout(() => onClearMessage(), 2000)
       } catch (e: any) {
         onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to update note: {e?.message ?? String(e)}</>, "error")
@@ -94,6 +96,7 @@ const NotesTab: React.FC<NotesTabProps> = ({
         onSetCommentDraft("")
         await onLoadNotes()
         onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Note saved successfully!</>, "success")
+        trackEvent("note", { action: "save", text_length: selectedText.length })
         setTimeout(() => onClearMessage(), 2000)
       } catch (e: any) {
         onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to save note: {e?.message ?? String(e)}</>, "error")

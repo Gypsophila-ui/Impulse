@@ -6,6 +6,7 @@ import { applyHighlightsToPage, clearHighlightsOnPage } from "~utils/agent-tools
 import type { Highlight } from "~utils/storage"
 import { deleteHighlight, deleteHighlightsByUrl, saveHighlights } from "~utils/storage"
 import { recordComponentEvent } from "~utils/bug-report"
+import { trackEvent } from "~utils/reading-tracker"
 
 import Spinner from "../common/Spinner"
 
@@ -104,6 +105,7 @@ const HighlightTab: React.FC<HighlightTabProps> = ({
 
       onShowMessage(<><Sparkles size={14} style={{ marginRight: 4, color: "#10b981" }} /> Highlighted successfully!</>, "success")
       recordComponentEvent("HighlightTab", "highlight_success")
+      trackEvent("highlight", { text_length: selectedText.length, count: 1 })
     } catch (e: any) {
       onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Failed to highlight:{"\n\n"}{e?.message ?? String(e)}</>, "error")
       recordComponentEvent("HighlightTab", "highlight_error", e?.message || String(e))

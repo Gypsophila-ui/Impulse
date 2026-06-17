@@ -5,6 +5,7 @@ import { FileText, Sparkles } from "lucide-react"
 import type { PaperMetadata } from "~types"
 import { extractMetadata } from "~utils/llm-client"
 import { saveMetadata } from "~utils/storage"
+import { trackEvent } from "~utils/reading-tracker"
 
 interface MetadataCardProps {
   metadata: PaperMetadata | null
@@ -50,6 +51,7 @@ const MetadataCard: React.FC<MetadataCardProps> = ({
       onSetMetadata(result)
       await saveMetadata(currentUrl, result)
       onSetMetadataExpanded(true)
+      trackEvent("metadata", { title: result.title, authors: result.authors?.length })
     } catch (e: any) {
       onSetError(`Metadata extraction failed: ${e?.message ?? String(e)}`)
     } finally {

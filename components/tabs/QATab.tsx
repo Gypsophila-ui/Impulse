@@ -6,6 +6,7 @@ import type { ChatMessage, ReadingGoal } from "~types"
 import { t } from "~utils/i18n"
 import { chatWithContext } from "~utils/llm-client"
 import { recordComponentEvent } from "~utils/bug-report"
+import { trackEvent } from "~utils/reading-tracker"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
 
 import Spinner from "../common/Spinner"
@@ -82,6 +83,7 @@ const QATab: React.FC<QATabProps> = ({
       onSetChatMessages(updatedMessages)
       await saveChatSession(currentUrl, currentTitle, updatedMessages, context)
       recordComponentEvent("QATab", "chat_success")
+      trackEvent("qa", { messages_count: updatedMessages.length, goal: readingGoal })
     } catch (e: any) {
       const errorMessages: ChatMessage[] = [...newMessages, { role: "assistant", content: `Error: ${e?.message ?? String(e)}` }]
       onSetChatMessages(errorMessages)
