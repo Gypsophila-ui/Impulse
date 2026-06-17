@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 import { Bug, ChevronDown, ChevronRight, Copy, Download, Sparkles, Wrench, X } from "lucide-react"
 import type { PaperMetadata, ReadingGoal } from "~types"
 import type { AppMode, TabKey } from "~components/common/Header"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import {
   collectBugReport,
   diagnoseWithAI,

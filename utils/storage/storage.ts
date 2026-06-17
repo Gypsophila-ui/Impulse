@@ -3,7 +3,7 @@
  */
 
 import type { ChatMessage, ChatSession, Language, PaperMetadata, PaperSnapshot, SavedComparison, Theme } from "~types"
-import { getSafeAllDistinctUrls, getSafeReadingStatsForUrl } from "~utils/reading-tracker"
+import { getSafeAllDistinctUrls, getSafeReadingStatsForUrl } from "~utils/reading/reading-tracker"
 
 export interface LLMConfig {
   apiKey: string

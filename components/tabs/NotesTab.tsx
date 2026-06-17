@@ -1,11 +1,11 @@
 import React from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { AlertTriangle, FileText, MessageSquare, Pencil, Save, Sparkles, Trash2, X } from "lucide-react"
 
-import type { Note } from "~utils/storage"
-import { deleteNote, saveNote, updateNote } from "~utils/storage"
+import type { Note } from "~utils/storage/storage"
+import { deleteNote, saveNote, updateNote } from "~utils/storage/storage"
 import { recordComponentEvent } from "~utils/bug-report"
-import { trackEvent } from "~utils/reading-tracker"
+import { trackEvent } from "~utils/reading/reading-tracker"
 
 import Spinner from "../common/Spinner"
 

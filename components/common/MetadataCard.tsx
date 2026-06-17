@@ -1,11 +1,11 @@
 import React from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { FileText, Sparkles } from "lucide-react"
 
 import type { PaperMetadata } from "~types"
-import { extractMetadata } from "~utils/llm-client"
-import { saveMetadata } from "~utils/storage"
-import { trackEvent } from "~utils/reading-tracker"
+import { extractMetadata } from "~utils/agent/llm-client"
+import { saveMetadata } from "~utils/storage/storage"
+import { trackEvent } from "~utils/reading/reading-tracker"
 
 interface MetadataCardProps {
   metadata: PaperMetadata | null

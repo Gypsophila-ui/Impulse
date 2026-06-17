@@ -11,8 +11,8 @@ import {
   startSession,
   type ReadingEventType,
   type ReadingSummary
-} from "./db"
-import { getReadingSummary } from "./db"
+} from "../storage/db"
+import { getReadingSummary } from "../storage/db"
 
 interface ReadingTrackerState {
   sessionId: string | null

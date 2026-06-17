@@ -1,5 +1,5 @@
 import React from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 
 const Spinner: React.FC = () => (
   <div

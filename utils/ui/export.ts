@@ -1,5 +1,5 @@
 import type { ChatMessage, PaperMetadata } from "~types"
-import type { Highlight, Note } from "~utils/storage"
+import type { Highlight, Note } from "~utils/storage/storage"
 
 export function generateMarkdown(
   metadata: PaperMetadata | null,

@@ -1,12 +1,12 @@
 import React from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { AlertTriangle, Sparkles, Trash2, X } from "lucide-react"
 
-import { applyHighlightsToPage, clearHighlightsOnPage } from "~utils/agent-tools"
-import type { Highlight } from "~utils/storage"
-import { deleteHighlight, deleteHighlightsByUrl, saveHighlights } from "~utils/storage"
+import { applyHighlightsToPage, clearHighlightsOnPage } from "~utils/agent/agent-tools"
+import type { Highlight } from "~utils/storage/storage"
+import { deleteHighlight, deleteHighlightsByUrl, saveHighlights } from "~utils/storage/storage"
 import { recordComponentEvent } from "~utils/bug-report"
-import { trackEvent } from "~utils/reading-tracker"
+import { trackEvent } from "~utils/reading/reading-tracker"
 
 import Spinner from "../common/Spinner"
 

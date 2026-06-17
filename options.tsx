@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react"
 
 import type { Language, Theme } from "~types"
-import { resetClient } from "~utils/llm-client"
+import { resetClient } from "~utils/agent/llm-client"
 import {
   clearConfig,
   getLanguage,
@@ -10,7 +10,7 @@ import {
   saveLLMConfig,
   setLanguage,
   setTheme
-} from "~utils/storage"
+} from "~utils/storage/storage"
 
 // Spinner component
 const Spinner = () => (

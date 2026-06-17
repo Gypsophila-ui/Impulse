@@ -1,7 +1,7 @@
 // Shared type definitions for Impulse
 
 // Re-export existing types from storage
-export type { LLMConfig, Note, Highlight } from "~utils/storage"
+export type { LLMConfig, Note, Highlight } from "~utils/storage/storage"
 
 // Re-export reading history types from SQLite db layer
 export type {
@@ -11,7 +11,7 @@ export type {
   ReadingSummary,
   ReadingSummaryBrief,
   ReadingEventType
-} from "~utils/db"
+} from "~utils/storage/db"
 
 // Chat types
 export interface ChatMessage {

@@ -1,13 +1,13 @@
 import React, { useRef } from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { AlertTriangle, Bot, FileText, Sparkles } from "lucide-react"
 
 import type { ChatMessage, ReadingGoal } from "~types"
-import { t } from "~utils/i18n"
-import { chatWithContext } from "~utils/llm-client"
+import { t } from "~utils/ui/i18n"
+import { chatWithContext } from "~utils/agent/llm-client"
 import { recordComponentEvent } from "~utils/bug-report"
-import { trackEvent } from "~utils/reading-tracker"
-import { deleteChatSession, saveChatSession } from "~utils/storage"
+import { trackEvent } from "~utils/reading/reading-tracker"
+import { deleteChatSession, saveChatSession } from "~utils/storage/storage"
 
 import Spinner from "../common/Spinner"
 import ReadingGoalSelector from "../common/ReadingGoalSelector"

@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { MessageSquare, X } from "lucide-react"
 
 import type { AskUserQuestionParams, AskUserQuestionResult } from "~types"

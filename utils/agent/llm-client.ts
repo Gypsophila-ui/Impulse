@@ -7,9 +7,9 @@ import {
   formatToolResultForLLM,
   type ToolExecutionContext,
   type ToolResult
-} from "~utils/agent-tools"
-import { PAPER_TOOLS, getToolPrompt } from "~utils/tool-definitions"
-import { getLLMConfig } from "~utils/storage"
+} from "./agent-tools"
+import { PAPER_TOOLS, getToolPrompt } from "./tool-definitions"
+import { getLLMConfig } from "~utils/storage/storage"
 
 let openaiClient: OpenAI | null = null
 

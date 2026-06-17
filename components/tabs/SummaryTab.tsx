@@ -1,11 +1,11 @@
 import React from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { AlertTriangle, Pencil, Sparkles, X } from "lucide-react"
 
 import type { ReadingGoal } from "~types"
-import { summarize } from "~utils/llm-client"
+import { summarize } from "~utils/agent/llm-client"
 import { recordComponentEvent } from "~utils/bug-report"
-import { trackEvent } from "~utils/reading-tracker"
+import { trackEvent } from "~utils/reading/reading-tracker"
 
 import Spinner from "../common/Spinner"
 import ReadingGoalSelector from "../common/ReadingGoalSelector"

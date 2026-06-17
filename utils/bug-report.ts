@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import type { PaperMetadata, ReadingGoal } from "~types"
 import type { AppMode, TabKey } from "~components/common/Header"
-import { getLLMConfig } from "~utils/storage"
+import { getLLMConfig } from "~utils/storage/storage"
 import { extractCodeContext, formatCodeContextForAI, type CodeContext } from "./code-context-extractor"
 
 // ─── Types ──────────────────────────────────────────────────────────────────

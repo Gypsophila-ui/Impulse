@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { Target, ChevronDown } from "lucide-react"
 
 import type { ReadingGoal } from "~types"
 import { READING_GOAL_CONFIG } from "~types"
-import { t } from "~utils/i18n"
+import { t } from "~utils/ui/i18n"
 
 interface ReadingGoalSelectorProps {
   value: ReadingGoal

@@ -1,11 +1,11 @@
 import React, { useState } from "react"
-import { borderRadius, shadows, transitions } from "~utils/design-tokens"
+import { borderRadius, shadows, transitions } from "~utils/ui/design-tokens"
 import { Globe, Moon, Settings, Sun, X } from "lucide-react"
 
-import { resetClient } from "~utils/llm-client"
-import { clearConfig, saveLLMConfig } from "~utils/storage"
+import { resetClient } from "~utils/agent/llm-client"
+import { clearConfig, saveLLMConfig } from "~utils/storage/storage"
 import type { Language, Theme } from "~types"
-import { t } from "~utils/i18n"
+import { t } from "~utils/ui/i18n"
 
 interface ConfigPreset {
   label: string

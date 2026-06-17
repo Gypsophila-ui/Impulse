@@ -1,9 +1,9 @@
 import React from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { FileText } from "lucide-react"
 
 import type { TabKey } from "./Header"
-import { t } from "~utils/i18n"
+import { t } from "~utils/ui/i18n"
 
 const tabKeys: Array<{ key: TabKey; labelKey: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }> = [
   { key: "summary", labelKey: "tab.summary", icon: FileText },

@@ -18,14 +18,14 @@ import {
 } from "./components"
 
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, Language, PaperMetadata, ReadingGoal, Theme } from "./types"
-import { downloadMarkdown, generateMarkdown } from "./utils/export"
-import { getSelectionInTab } from "./utils/get-selection"
-import { getCurrentLanguage, setCurrentLanguage } from "./utils/i18n"
+import { downloadMarkdown, generateMarkdown } from "./utils/ui/export"
+import { getSelectionInTab } from "./utils/reading/get-selection"
+import { getCurrentLanguage, setCurrentLanguage } from "./utils/ui/i18n"
 import {
   resetClient,
   summarize,
   translate
-} from "./utils/llm-client"
+} from "./utils/agent/llm-client"
 import {
   clearConfig,
   deleteChatSession,
@@ -44,11 +44,11 @@ import {
   setTheme as storeTheme,
   type Highlight,
   type Note
-} from "./utils/storage"
+} from "./utils/storage/storage"
 
 import { recordComponentEvent, startConsoleInterception, stopConsoleInterception } from "./utils/bug-report"
 import type { DiagnosisResult } from "./utils/bug-report"
-import { useReadingTracker, trackEvent as globalTrackEvent } from "./utils/reading-tracker"
+import { useReadingTracker, trackEvent as globalTrackEvent } from "./utils/reading/reading-tracker"
 
 import type { AppMode, TabKey } from "./components/common/Header"
 

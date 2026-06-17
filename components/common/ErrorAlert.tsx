@@ -1,5 +1,5 @@
 import React from "react"
-import { borderRadius } from "~utils/design-tokens"
+import { borderRadius } from "~utils/ui/design-tokens"
 import { AlertTriangle, Sparkles } from "lucide-react"
 
 interface ErrorAlertProps {

@@ -7,13 +7,13 @@ import ReactMarkdown from "react-markdown"
 import "katex/dist/katex.min.css"
 
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal } from "~types"
-import { type ToolExecutionContext } from "~utils/agent-tools"
-import { borderRadius, shadows, transitions } from "~utils/design-tokens"
+import { type ToolExecutionContext } from "~utils/agent/agent-tools"
+import { borderRadius, shadows, transitions } from "~utils/ui/design-tokens"
 import { searchSkills, SKILLS, type Skill } from "~utils/skills"
-import { agentChat } from "~utils/llm-client"
-import { extractPdfText, isPdfUrl, processPdfBuffer } from "~utils/pdf-extractor"
-import { deleteChatSession, saveChatSession } from "~utils/storage"
-import { trackEvent } from "~utils/reading-tracker"
+import { agentChat } from "~utils/agent/llm-client"
+import { extractPdfText, isPdfUrl, processPdfBuffer } from "~utils/reading/pdf-extractor"
+import { deleteChatSession, saveChatSession } from "~utils/storage/storage"
+import { trackEvent } from "~utils/reading/reading-tracker"
 
 import Spinner from "./common/Spinner"
 import ReadingGoalSelector from "./common/ReadingGoalSelector"
@@ -715,7 +715,7 @@ const AgentView: React.FC<AgentViewProps> = ({
       const context = chatContext || selectedText
 
       // Fetch reading history for agent context (sync, safe — returns null if DB not ready)
-      const { getSafeReadingSummary, getSafeReadingStatsForUrl } = await import("~utils/reading-tracker")
+      const { getSafeReadingSummary, getSafeReadingStatsForUrl } = await import("~utils/reading/reading-tracker")
       const readingSummary = getSafeReadingSummary()
       const currentUrlStats = getSafeReadingStatsForUrl(currentUrl)
 
