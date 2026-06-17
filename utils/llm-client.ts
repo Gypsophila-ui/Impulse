@@ -278,6 +278,50 @@ export function resetClient(): void {
 
 const MAX_TOOL_CALL_ROUNDS = 5
 
+/**
+ * Build a concise reading history section for injection into the system prompt.
+ * Limits output to ~800 bytes to protect token budget.
+ * Returns empty string when no reading data is available.
+ */
+function buildReadingHistorySection(toolContext: ToolExecutionContext): string {
+  if (!toolContext.readingSummary) return ""
+
+  const { totalPapers, recentTitles, totalDurationMinutes, topEventTypes } =
+    toolContext.readingSummary
+
+  if (totalPapers === 0) return ""
+
+  const lines: string[] = [
+    `- 累计阅读论文：${totalPapers} 篇`,
+    `- 累计阅读时长：约 ${totalDurationMinutes} 分钟`
+  ]
+
+  if (recentTitles && recentTitles.length > 0) {
+    lines.push(`- 最近阅读的论文：`)
+    for (const p of recentTitles.slice(0, 10)) {
+      lines.push(`  · 《${p.title}》— ${p.duration_minutes}分钟`)
+    }
+  }
+
+  if (topEventTypes && topEventTypes.length > 0) {
+    const topTypes = topEventTypes
+      .slice(0, 5)
+      .map((t) => t.type)
+      .join("、")
+    lines.push(`- 主要操作类型：${topTypes}`)
+  }
+
+  // Current paper stats
+  if (toolContext.currentUrlStats && toolContext.currentUrlStats.sessionCount > 0) {
+    const s = toolContext.currentUrlStats
+    lines.push(
+      `- 当前论文：已打开 ${s.sessionCount} 次，累计阅读约 ${Math.round(s.totalDurationSeconds / 60)} 分钟`
+    )
+  }
+
+  return "\n# 阅读历史\n" + lines.join("\n")
+}
+
 export async function agentChat(
   messages: ChatMessage[],
   paperContext: string,
@@ -307,6 +351,9 @@ export async function agentChat(
 
   const goalPrompt = readingGoal ? getReadingGoalPrompt(readingGoal) : ""
 
+  // Build concise reading history section for system prompt
+  const readingHistorySection = buildReadingHistorySection(toolContext)
+
   const systemMessage = {
     role: "system" as const,
     content: `你是一个专业的学术论文阅读与研究助手 Agent，专注于帮助用户高效阅读和理解学术论文。
@@ -327,7 +374,7 @@ ${summarySection}
 - 页面标题：${toolContext.currentTitle}
 - 选中文本：${toolContext.selectedText?.slice(0, 500) || "无"}${(toolContext.selectedText?.length || 0) > 500 ? "..." : ""}
 - 论文全文：${toolContext.paperText ? `已加载 (${toolContext.paperText.length} 字符)` : "未加载"}
-
+${readingHistorySection}
 # 论文片段
 ${paperContext}
 ${goalPrompt}
@@ -346,6 +393,7 @@ ${goalPrompt}
 - **简洁高效**：直接回应用户需求，避免冗余的解释和客套话
 - **智能引导**：在适当时候主动提供笔记建议、追问建议或相关问题引导
 - **明确边界**：如果问题超出论文范围或当前上下文不足，明确说明并建议用户提供更多信息
+- **阅读历史感知**：你可以了解用户的论文阅读历史（最近读过的论文、阅读时长等）。在对比论文、推荐阅读、或用户询问阅读习惯时，主动利用阅读历史数据提供更有针对性的建议
 
 请根据用户需求灵活运用工具和能力，提供专业的学术阅读辅助服务。`
   }

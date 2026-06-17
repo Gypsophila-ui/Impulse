@@ -3,6 +3,7 @@
  */
 
 import type { ChatMessage, ChatSession, Language, PaperMetadata, PaperSnapshot, SavedComparison, Theme } from "~types"
+import { getSafeAllDistinctUrls, getSafeReadingStatsForUrl } from "~utils/reading-tracker"
 
 export interface LLMConfig {
   apiKey: string
@@ -355,12 +356,16 @@ export async function getPaperSnapshot(url: string): Promise<PaperSnapshot | nul
     getChatSessionByUrl(url)
   ])
 
-  // Must have at least a title or some notes to be a valid candidate
-  if (!metadata?.title && notes.length === 0 && highlights.length === 0) return null
+  // Enrich with SQLite reading history
+  const stats = getSafeReadingStatsForUrl(url)
+
+  // Must have at least a title, some notes, highlights, or SQLite reading history
+  const hasSqliteData = stats !== null && stats.sessionCount > 0
+  if (!metadata?.title && notes.length === 0 && highlights.length === 0 && !hasSqliteData) return null
 
   return {
     url,
-    title: metadata?.title || url,
+    title: metadata?.title || (session?.pageTitle || url),
     authors: metadata?.authors || [],
     year: metadata?.year || "",
     journal: metadata?.journal || "",
@@ -371,7 +376,15 @@ export async function getPaperSnapshot(url: string): Promise<PaperSnapshot | nul
     })),
     highlights: highlights.slice(0, 10).map((h) => h.phrase),
     contextPreview: session?.paperContext?.slice(0, 800) || "",
-    lastVisited: session?.timestamp || notes[0]?.timestamp || 0
+    lastVisited: session?.timestamp || notes[0]?.timestamp || stats?.lastVisitTime || 0,
+    // SQLite enrichment
+    ...(stats ? {
+      sessionCount: stats.sessionCount,
+      totalDurationSeconds: stats.totalDurationSeconds,
+      eventCount: stats.eventCount,
+      topEventTypes: stats.topEventTypes,
+      firstVisitTime: stats.firstVisitTime ?? undefined
+    } : {})
   }
 }
 
@@ -387,13 +400,19 @@ export async function listCandidatePapers(): Promise<PaperSnapshot[]> {
     chrome.storage.local.get(STORAGE_KEYS.CHAT_SESSIONS).then((r) => (r[STORAGE_KEYS.CHAT_SESSIONS] || []) as Array<{ url: string; pageTitle: string; timestamp: number; paperContext: string }>)
   ])
 
-  // Collect all known URLs
+  // Collect all known URLs from chrome.storage
   const urlSet = new Set<string>([
     ...allNotes.map((n) => n.url),
     ...allHighlights.map((h) => h.url),
     ...allMetadata.map((m) => m.url),
     ...allSessions.map((s) => s.url)
   ])
+
+  // Also merge URLs from SQLite reading sessions (papers visited but not interacted with)
+  const sqliteUrls = getSafeAllDistinctUrls()
+  for (const url of sqliteUrls) {
+    urlSet.add(url)
+  }
 
   const snapshots = await Promise.all(
     Array.from(urlSet).map((url) => getPaperSnapshot(url))

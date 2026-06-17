@@ -8,6 +8,7 @@ import {
   saveHighlights,
   saveNote
 } from "~utils/storage"
+import { trackEvent } from "~utils/reading-tracker"
 import {
   extractMetadata,
   generateHighlights as generateHighlightsLLM,
@@ -21,6 +22,17 @@ export interface ToolExecutionContext {
   currentTitle: string
   currentTabId: number | null
   askUserQuestion?: AskUserQuestionCallback
+  /** Reading history summary for system prompt injection (null when DB not initialized) */
+  readingSummary?: import("~types").ReadingSummaryBrief | null
+  /** Reading stats for the current URL */
+  currentUrlStats?: {
+    sessionCount: number
+    totalDurationSeconds: number
+    eventCount: number
+    topEventTypes: Array<{ type: string; count: number }>
+    firstVisitTime: number | null
+    lastVisitTime: number | null
+  } | null
 }
 
 export interface ToolResult {
@@ -212,6 +224,7 @@ export async function executeToolCall(
           context.currentUrl,
           context.currentTitle
         )
+        trackEvent("note", { action: "agent_save", text_length: effectiveText.length })
         return {
           success: true,
           data: note,
@@ -265,6 +278,7 @@ export async function executeToolCall(
             context.currentUrl,
             context.currentTitle
           )
+          trackEvent("highlight", { count: result.count, source: "agent" })
           const note = phrasesInSelection.length < validPhrases.length
             ? `（其中 ${phrasesInSelection.length} 个在可用文本中）`
             : ""
@@ -355,6 +369,71 @@ export async function executeToolCall(
         }
       } catch (e: any) {
         return { success: false, error: e?.message, message: `搜索失败：${e?.message ?? String(e)}` }
+      }
+    }
+
+    case "get_reading_history": {
+      const days = (args.days as number) || 14
+      const specificUrl = args.specific_url as string | undefined
+
+      try {
+        const { getSafeReadingSummary, getSafeReadingStatsForUrl } = await import("~utils/reading-tracker")
+
+        if (specificUrl) {
+          const stats = getSafeReadingStatsForUrl(specificUrl)
+          if (!stats) {
+            return {
+              success: true,
+              data: null,
+              message: `未找到 URL "${specificUrl}" 的阅读记录。该论文可能尚未被阅读，或阅读历史数据库未初始化。`
+            }
+          }
+          trackEvent("agent_message", { action: "reading_history_url", url: specificUrl })
+          return {
+            success: true,
+            data: stats,
+            message:
+              `论文《${specificUrl}》阅读统计：\n` +
+              `- 访问次数：${stats.sessionCount} 次\n` +
+              `- 累计阅读时长：约 ${Math.round(stats.totalDurationSeconds / 60)} 分钟\n` +
+              `- 事件记录数：${stats.eventCount}\n` +
+              (stats.topEventTypes.length > 0
+                ? `- 主要操作：${stats.topEventTypes.map((t) => `${t.type}(${t.count}次)`).join("、")}\n`
+                : "") +
+              (stats.firstVisitTime
+                ? `- 首次阅读：${new Date(stats.firstVisitTime).toLocaleDateString("zh-CN")}\n`
+                : "") +
+              (stats.lastVisitTime
+                ? `- 最近阅读：${new Date(stats.lastVisitTime).toLocaleDateString("zh-CN")}`
+                : "")
+          }
+        }
+
+        const summary = getSafeReadingSummary(days)
+        if (!summary) {
+          return {
+            success: true,
+            data: null,
+            message: "阅读历史数据库尚未初始化，暂无阅读记录。请先打开几篇论文进行阅读，系统会自动跟踪记录。"
+          }
+        }
+        trackEvent("agent_message", { action: "reading_history_summary", days })
+        const recentList = summary.recentTitles
+          .slice(0, 10)
+          .map((p, i) => `${i + 1}. 《${p.title}》— 约${p.duration_minutes}分钟 (${p.url})`)
+          .join("\n")
+        return {
+          success: true,
+          data: summary,
+          message:
+            `最近 ${days} 天的阅读统计：\n` +
+            `- 累计阅读论文：${summary.totalPapers} 篇\n` +
+            `- 总阅读时长：约 ${summary.totalDurationMinutes} 分钟\n` +
+            `- 主要操作：${summary.topEventTypes.map((t) => `${t.type}(${t.count}次)`).join("、")}\n` +
+            `- 最近阅读的论文：\n${recentList || "  暂无记录"}`
+        }
+      } catch (e: any) {
+        return { success: false, error: e?.message, message: `获取阅读历史失败：${e?.message ?? String(e)}` }
       }
     }
 
@@ -501,6 +580,7 @@ ${noteText}
           dimText,
           focusText
         )
+        trackEvent("compare", { paper_count: validSnapshots.length, dimensions: dimensions.length })
 
         return {
           success: true,
@@ -526,6 +606,7 @@ ${noteText}
       try {
         const result: ComparisonResult = JSON.parse(comparisonJson)
         const saved = await saveComparison(title, result)
+        trackEvent("compare", { paper_count: saved.paperUrls?.length || 0, title })
         return {
           success: true,
           data: { id: saved.id, title: saved.title },

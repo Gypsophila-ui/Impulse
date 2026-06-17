@@ -56,6 +56,25 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
     example: 'search_notes(query: "注意力机制")'
   },
   {
+    name: "get_reading_history",
+    description:
+      "获取用户的论文阅读历史统计，包括最近阅读的论文列表、总阅读时长、以及指定论文的详细阅读行为数据。当用户询问阅读历史、阅读习惯、或想了解自己的阅读行为时使用。也可以用于在对比前了解某篇论文的历史阅读情况。",
+    parameters: {
+      days: {
+        type: "number",
+        description: "查询最近多少天的历史，默认为 14 天"
+      },
+      specific_url: {
+        type: "string",
+        description: "指定论文的 URL，如果提供则返回该论文的详细阅读统计（包括访问次数、时长、事件类型分布等）"
+      }
+    },
+    required: [],
+    category: "阅读历史",
+    usageHint: "用户问“我最近读了什么”、“这篇论文我读了多久”、“我的阅读习惯如何”",
+    example: 'get_reading_history(days: 30) 或 get_reading_history(specific_url: "https://arxiv.org/abs/1706.03762")'
+  },
+  {
     name: "apply_highlight",
     description:
       "将指定短语在页面上高亮显示并保存。当用户想要高亮、标记、强调某些关键内容时使用。",

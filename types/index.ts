@@ -3,6 +3,16 @@
 // Re-export existing types from storage
 export type { LLMConfig, Note, Highlight } from "~utils/storage"
 
+// Re-export reading history types from SQLite db layer
+export type {
+  ReadingSession,
+  ReadingEvent,
+  DailyStats,
+  ReadingSummary,
+  ReadingSummaryBrief,
+  ReadingEventType
+} from "~utils/db"
+
 // Chat types
 export interface ChatMessage {
   role: "user" | "assistant"
@@ -146,6 +156,12 @@ export interface PaperSnapshot {
   /** First 800 chars of the paper's chat context (abstract / intro) */
   contextPreview: string
   lastVisited: number
+  /** Reading history from SQLite (available when DB is initialized) */
+  sessionCount?: number
+  totalDurationSeconds?: number
+  eventCount?: number
+  topEventTypes?: Array<{ type: string; count: number }>
+  firstVisitTime?: number
 }
 
 export type ComparisonDimension =

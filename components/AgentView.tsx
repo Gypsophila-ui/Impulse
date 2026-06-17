@@ -13,6 +13,7 @@ import { searchSkills, SKILLS, type Skill } from "~utils/skills"
 import { agentChat } from "~utils/llm-client"
 import { extractPdfText, isPdfUrl, processPdfBuffer } from "~utils/pdf-extractor"
 import { deleteChatSession, saveChatSession } from "~utils/storage"
+import { trackEvent } from "~utils/reading-tracker"
 
 import Spinner from "./common/Spinner"
 import ReadingGoalSelector from "./common/ReadingGoalSelector"
@@ -713,13 +714,20 @@ const AgentView: React.FC<AgentViewProps> = ({
     try {
       const context = chatContext || selectedText
 
+      // Fetch reading history for agent context (sync, safe — returns null if DB not ready)
+      const { getSafeReadingSummary, getSafeReadingStatsForUrl } = await import("~utils/reading-tracker")
+      const readingSummary = getSafeReadingSummary()
+      const currentUrlStats = getSafeReadingStatsForUrl(currentUrl)
+
       const toolContext: ToolExecutionContext = {
         selectedText,
         paperText: chatContext || selectedText,
         currentUrl,
         currentTitle,
         currentTabId,
-        askUserQuestion: onAskUserQuestion
+        askUserQuestion: onAskUserQuestion,
+        readingSummary,
+        currentUrlStats
       }
 
       const result: AgentChatResult = await agentChat(
@@ -744,6 +752,7 @@ const AgentView: React.FC<AgentViewProps> = ({
           onSetLastToolCalls(result.toolCallsExecuted)
         }
         await saveChatSession(currentUrl, currentTitle, updatedMessages, context, result.newSummary || chatSummary)
+        trackEvent("agent_message", { messages_count: updatedMessages.length, tool_calls: result.toolCallsExecuted?.length || 0, goal: readingGoal })
       } else {
         onSetChatMessages([...newMessages, { role: "assistant", content: `Error: ${result.message}` }])
       }
