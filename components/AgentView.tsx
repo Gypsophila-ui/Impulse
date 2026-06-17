@@ -703,9 +703,12 @@ const AgentView: React.FC<AgentViewProps> = ({
       return
     }
 
-    const userMessage: ChatMessage = { role: "user", content: input }
-    const newMessages = [...chatMessages, userMessage]
-    onSetChatMessages(newMessages)
+    // Display message keeps original /skill form; API version uses resolved prompt
+    const userMessage: ChatMessage = { role: "user", content: rawInput }
+    const apiUserMessage: ChatMessage = { role: "user", content: input }
+    const displayMessages = [...chatMessages, userMessage]
+    const apiMessages = [...chatMessages, apiUserMessage]
+    onSetChatMessages(displayMessages)
     onSetChatInput("")
     onSetChatLoading(true)
     onSetAgentStatus(null)
@@ -731,7 +734,7 @@ const AgentView: React.FC<AgentViewProps> = ({
       }
 
       const result: AgentChatResult = await agentChat(
-        newMessages,
+        apiMessages,
         context,
         toolContext,
         (status, phase) => {
@@ -743,7 +746,7 @@ const AgentView: React.FC<AgentViewProps> = ({
 
       if (result.success) {
         const assistantMessage: ChatMessage = { role: "assistant", content: result.message }
-        const updatedMessages = [...newMessages, assistantMessage]
+        const updatedMessages = [...displayMessages, assistantMessage]
         onSetChatMessages(updatedMessages)
         if (result.newSummary) {
           onSetChatSummary(result.newSummary)
@@ -754,10 +757,10 @@ const AgentView: React.FC<AgentViewProps> = ({
         await saveChatSession(currentUrl, currentTitle, updatedMessages, context, result.newSummary || chatSummary)
         trackEvent("agent_message", { messages_count: updatedMessages.length, tool_calls: result.toolCallsExecuted?.length || 0, goal: readingGoal })
       } else {
-        onSetChatMessages([...newMessages, { role: "assistant", content: `Error: ${result.message}` }])
+        onSetChatMessages([...displayMessages, { role: "assistant", content: `Error: ${result.message}` }])
       }
     } catch (e: any) {
-      onSetChatMessages([...newMessages, { role: "assistant", content: `Error: ${e?.message ?? String(e)}` }])
+      onSetChatMessages([...displayMessages, { role: "assistant", content: `Error: ${e?.message ?? String(e)}` }])
     } finally {
       onSetChatLoading(false)
       onSetAgentStatus(null)
