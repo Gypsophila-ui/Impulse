@@ -48,6 +48,7 @@ import {
 
 import { recordComponentEvent, startConsoleInterception, stopConsoleInterception } from "./utils/bug-report"
 import type { DiagnosisResult } from "./utils/bug-report"
+import { useReadingTracker, trackEvent as globalTrackEvent } from "./utils/reading-tracker"
 
 import type { AppMode, TabKey } from "./components/common/Header"
 
@@ -105,6 +106,9 @@ export default function Sidepanel() {
 
   // Reading goal state
   const [readingGoal, setReadingGoal] = useState<ReadingGoal>("understand_method")
+
+  // Reading tracker
+  const { track } = useReadingTracker(currentUrl, currentTitle)
 
   // Ask User Question state
   const [askQuestionParams, setAskQuestionParams] = useState<AskUserQuestionParams | null>(null)
@@ -368,6 +372,7 @@ export default function Sidepanel() {
           const title = (currentTitle || "paper").replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40)
           const date = new Date().toISOString().slice(0, 10)
           downloadMarkdown(md, `impulse-${title}-${date}.md`)
+          globalTrackEvent("export", { format: "markdown", notes: notes.length, highlights: highlights.length })
         }
       }
     }
@@ -378,10 +383,12 @@ export default function Sidepanel() {
   // Track component events for bug diagnosis
   useEffect(() => {
     recordComponentEvent("Sidepanel", "tab_switch", activeTab)
+    globalTrackEvent("page_view", { tab: activeTab })
   }, [activeTab])
 
   useEffect(() => {
     recordComponentEvent("Sidepanel", "mode_switch", mode)
+    globalTrackEvent("page_view", { mode })
   }, [mode])
 
   useEffect(() => {
@@ -415,6 +422,7 @@ export default function Sidepanel() {
 
       if (actions[action]) {
         actions[action]()
+        globalTrackEvent(action as "translation" | "summary" | "highlight" | "note" | "qa", { source: "quick_action", text_length: text.length })
       }
     }
 

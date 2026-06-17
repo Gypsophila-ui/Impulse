@@ -4,6 +4,7 @@ import { AlertTriangle, Globe, X } from "lucide-react"
 
 import { translate } from "~utils/llm-client"
 import { recordComponentEvent } from "~utils/bug-report"
+import { trackEvent } from "~utils/reading-tracker"
 
 import Spinner from "../common/Spinner"
 
@@ -47,6 +48,7 @@ const TranslationTab: React.FC<TranslationTabProps> = ({
       const result = await translate(selectedText)
       onShowMessage(result, "success")
       recordComponentEvent("TranslationTab", "translate_success")
+      trackEvent("translation", { text_length: selectedText.length })
     } catch (e: any) {
       onShowMessage(<><X size={14} style={{ marginRight: 4, color: "#ef4444" }} /> Translation failed:{"\n\n"}{e?.message ?? String(e)}</>, "error")
       recordComponentEvent("TranslationTab", "translate_error", e?.message || String(e))
