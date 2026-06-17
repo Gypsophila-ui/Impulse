@@ -52,6 +52,15 @@
     "side_panel": {
       "default_path": "sidepanel.html"
     },
+    "web_accessible_resources": [
+      {
+        "resources": ["pdfviewer.html"],
+        "matches": ["<all_urls>"]
+      }
+    ],
+    "content_security_policy": {
+      "extension_pages": "script-src 'self' 'wasm-unsafe-eval' http://localhost; object-src 'self'"
+    },
     "permissions": [
       "sidePanel",
       "scripting",

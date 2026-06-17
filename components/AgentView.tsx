@@ -674,7 +674,7 @@ const AgentView: React.FC<AgentViewProps> = ({
 
   // Sync selectedText as fallback context when no PDF context exists
   useEffect(() => {
-    if (!chatContext && selectedText.trim() && !isPdfUrl(currentUrl)) {
+    if (!chatContext && selectedText.trim()) {
       onSetChatContext(selectedText)
     }
   }, [selectedText])

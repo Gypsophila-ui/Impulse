@@ -30,16 +30,8 @@ const MAX_CHARS = 60_000
  */
 export async function extractPdfText(url: string): Promise<PdfExtractResult> {
   try {
-    // 处理不同类型的 PDF URL
-    let arrayBuffer: ArrayBuffer
-    
     // 1. 处理本地文件 PDF (file:// 协议)
     if (url.startsWith('file://')) {
-      // 本地文件由于浏览器安全限制无法直接读取
-      // 建议用户使用以下替代方案：
-      // 1. 将 PDF 上传到临时服务器
-      // 2. 使用在线 PDF 查看器
-      // 3. 手动复制 PDF 内容
       return {
         text: "",
         pageCount: 0,
@@ -47,52 +39,56 @@ export async function extractPdfText(url: string): Promise<PdfExtractResult> {
         error: "浏览器安全限制：无法直接读取本地 PDF 文件。建议：1) 使用在线 PDF 链接 2) 手动复制内容到聊天框"
       }
     }
-    
-    // 2. 处理 arXiv PDF 链接 — 去掉版本号后缀 (e.g. 2301.12345v2 → 2301.12345.pdf)
+
+    // 2. 处理 arXiv PDF 链接 — 去掉版本号后缀，确保以 .pdf 结尾
+    //    e.g. 2301.12345v2 → 2301.12345.pdf, 2301.12345 → 2301.12345.pdf
     let fetchUrl = url
     if (url.includes('arxiv.org/pdf/')) {
-      fetchUrl = url.replace(/v\d+$/, '') + '.pdf'
+      // 先去掉查询参数和 hash
+      const base = url.split(/[?#]/)[0]
+      // 去掉版本号后缀 (v1, v2, ...)
+      const stripped = base.replace(/v\d+$/i, '')
+      // 如果还没有 .pdf 后缀，加上
+      fetchUrl = stripped.endsWith('.pdf') ? stripped : stripped + '.pdf'
     }
-    
-    // 3. 尝试多种获取策略
+
+    // 3. 使用 CORS 模式获取（扩展有 host_permissions，可以绕过 CORS）
+    console.debug('[Impulse] Fetching PDF from:', fetchUrl)
     let response: Response
-    let fetchError: Error | null = null
-    
-    // 策略1: 直接 fetch
     try {
       response = await fetch(fetchUrl)
-      if (response.ok) {
-        arrayBuffer = await response.arrayBuffer()
-        return await processPdfBuffer(arrayBuffer)
+    } catch (e: any) {
+      console.error('[Impulse] PDF fetch failed:', e?.message ?? e)
+      return {
+        text: "",
+        pageCount: 0,
+        truncated: false,
+        error: `PDF 获取失败（网络错误）: ${e?.message || '请检查网络连接'}`
       }
-    } catch (e) {
-      fetchError = e as Error
     }
-    
-    // 策略2: 使用 CORS 模式
-    try {
-      response = await fetch(fetchUrl, {
-        mode: 'cors',
-        credentials: 'omit'
-      })
-      if (response.ok) {
-        arrayBuffer = await response.arrayBuffer()
-        return await processPdfBuffer(arrayBuffer)
+
+    if (!response.ok) {
+      console.error('[Impulse] PDF fetch returned HTTP', response.status, response.statusText)
+      // 尝试获取响应文本作为错误信息（可能是 HTML 错误页）
+      let detail = ""
+      try {
+        const text = await response.text()
+        const title = text.match(/<title>(.*?)<\/title>/i)?.[1]
+        if (title) detail = ` (${title})`
+      } catch { /* ignore */ }
+      return {
+        text: "",
+        pageCount: 0,
+        truncated: false,
+        error: `PDF 获取失败: HTTP ${response.status} ${response.statusText}${detail}`
       }
-    } catch (e) {
-      fetchError = e as Error
     }
-    
-    // 所有策略都失败
-    return {
-      text: "",
-      pageCount: 0,
-      truncated: false,
-      error: `无法获取 PDF: ${fetchError?.message || '网络请求失败'}`
-    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    return await processPdfBuffer(arrayBuffer)
   } catch (e: any) {
-    // 捕获任何未预期的错误
     const msg = e?.message ?? String(e)
+    console.error('[Impulse] PDF extraction error:', msg)
     return {
       text: "",
       pageCount: 0,
@@ -185,11 +181,15 @@ export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExt
 
 /**
  * Detect whether the current tab URL is a PDF.
+ * Checks for common PDF URL patterns used by academic publishers and preprint servers.
  */
 export function isPdfUrl(url: string): boolean {
   if (!url) return false
-  const u = url.toLowerCase().split("?")[0]
+  // Strip query params and hash
+  const u = url.toLowerCase().split(/[?#]/)[0]
   if (u.endsWith(".pdf")) return true
   if (u.includes("/pdf/")) return true
+  // Additional patterns for common academic sites
+  if (u.includes("arxiv.org/abs/")) return false // abstract page, not PDF
   return false
 }

@@ -21,6 +21,41 @@ export interface Note {
   updatedAt?: number
 }
 
+// ─── Highlight Categories ──────────────────────────────────────────────────
+
+export type HighlightCategory =
+  | "important"
+  | "question"
+  | "definition"
+  | "method"
+  | "default"
+
+export interface HighlightCategoryConfig {
+  label: string
+  color: string
+  description: string
+}
+
+export const HIGHLIGHT_CATEGORIES: Record<HighlightCategory, HighlightCategoryConfig> = {
+  important: { label: "重要", color: "#fef08a", description: "关键论点 / 核心结论" },
+  question: { label: "疑问", color: "#fecaca", description: "需要进一步思考的问题" },
+  definition: { label: "定义", color: "#bfdbfe", description: "术语 / 概念定义" },
+  method: { label: "方法", color: "#bbf7d0", description: "技术方法 / 实验步骤" },
+  default: { label: "普通", color: "#fed7aa", description: "一般高亮" }
+}
+
+export const HIGHLIGHT_CATEGORY_ORDER: HighlightCategory[] = [
+  "important",
+  "question",
+  "definition",
+  "method",
+  "default"
+]
+
+export function getHighlightColor(category?: HighlightCategory): string {
+  return HIGHLIGHT_CATEGORIES[category ?? "default"].color
+}
+
 export interface Highlight {
   id: string
   phrase: string
@@ -29,6 +64,7 @@ export interface Highlight {
   pageTitle: string
   timestamp: number
   color?: string
+  category?: HighlightCategory
 }
 
 const STORAGE_KEYS = {
@@ -189,9 +225,10 @@ export async function saveHighlights(
   sourceText: string,
   url: string,
   pageTitle: string,
-  color: string = "#fef08a"
+  category: HighlightCategory = "default"
 ): Promise<Highlight[]> {
   const highlights = await getAllHighlights()
+  const color = getHighlightColor(category)
   const newHighlights: Highlight[] = phrases.map((phrase) => ({
     id: generateHighlightId(),
     phrase,
@@ -199,7 +236,8 @@ export async function saveHighlights(
     url,
     pageTitle,
     timestamp: Date.now(),
-    color
+    color,
+    category
   }))
 
   highlights.push(...newHighlights)

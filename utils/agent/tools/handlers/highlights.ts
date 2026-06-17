@@ -13,6 +13,7 @@ async function handleApplyHighlight(
   _onStatus?: ToolExecutionCallback
 ): Promise<ToolResult> {
   const phrases = args.phrases as string[]
+  const category = (args.category as string | undefined) || "default"
   if (!phrases?.length) {
     return { success: false, error: "没有指定要高亮的短语", message: "高亮失败：没有指定短语" }
   }
@@ -33,15 +34,25 @@ async function handleApplyHighlight(
       ? validPhrases.filter((p) => effectiveText.includes(p))
       : []
 
-    const result = await applyHighlightsToPage(context.currentTabId, validPhrases)
+    // Save first so we get stable IDs, then inject with those IDs
+    const savedHighlights = await saveHighlights(
+      validPhrases,
+      effectiveText || "页面内容",
+      context.currentUrl,
+      context.currentTitle,
+      category as any
+    )
+
+    const injections = savedHighlights.map((h) => ({
+      id: h.id,
+      phrase: h.phrase,
+      category: h.category,
+      color: h.color || "#fed7aa"
+    }))
+
+    const result = await applyHighlightsToPage(context.currentTabId, injections)
     if (result.success && result.count > 0) {
-      await saveHighlights(
-        validPhrases.slice(0, result.count),
-        effectiveText || "页面内容",
-        context.currentUrl,
-        context.currentTitle
-      )
-      trackEvent("highlight", { count: result.count, source: "agent" })
+      trackEvent("highlight", { count: result.count, source: "agent", category })
       const note = phrasesInSelection.length < validPhrases.length
         ? `（其中 ${phrasesInSelection.length} 个在可用文本中）`
         : ""

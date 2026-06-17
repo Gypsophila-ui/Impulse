@@ -20,6 +20,7 @@ import {
 import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, Language, PaperMetadata, ReadingGoal, Theme } from "./types"
 import { downloadMarkdown, generateMarkdown } from "./utils/ui/export"
 import { getSelectionInTab } from "./utils/reading/get-selection"
+import { isPdfUrl } from "./utils/reading/pdf-extractor"
 import { getCurrentLanguage, setCurrentLanguage } from "./utils/ui/i18n"
 import {
   resetClient,
@@ -53,6 +54,25 @@ import { useReadingTracker, trackEvent as globalTrackEvent } from "./utils/readi
 import type { AppMode, TabKey } from "./components/common/Header"
 
 const isSameText = (a: string, b: string) => a === b
+
+/**
+ * Extract the effective storage URL from a tab URL.
+ * If the tab is our Impulse PDF viewer page (pdfviewer.html?url=...),
+ * extract and return the original PDF URL so that highlights/notes/chat
+ * are shared between the native PDF page and our viewer.
+ */
+const getEffectiveUrl = (tabUrl: string): string => {
+  if (tabUrl.includes("pdfviewer.html")) {
+    try {
+      const params = new URLSearchParams(tabUrl.split("?")[1])
+      const originalUrl = params.get("url")
+      if (originalUrl) return originalUrl
+    } catch {
+      // fall through to return tabUrl
+    }
+  }
+  return tabUrl
+}
 
 export default function Sidepanel() {
   const [activeTab, setActiveTab] = useState<TabKey>("summary")
@@ -91,6 +111,9 @@ export default function Sidepanel() {
   const [generatingHighlights, setGeneratingHighlights] = useState(false)
   const [applyingHighlights, setApplyingHighlights] = useState(false)
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
+
+  // True when the active tab is a native Chrome PDF viewer (not our Impulse viewer)
+  const [isNativePdf, setIsNativePdf] = useState(false)
 
   // Q&A Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -236,10 +259,19 @@ export default function Sidepanel() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (tab?.url) {
-        setCurrentUrl(tab.url)
+        // If this is our Impulse PDF viewer page, use the original PDF URL as storage key
+        // so highlights/notes are shared between native PDF page and our viewer.
+        const effectiveUrl = getEffectiveUrl(tab.url)
+        setCurrentUrl(effectiveUrl)
         setCurrentTitle(tab.title || "Untitled")
         setCurrentTabId(tab.id || null)
-        const pageNotes = await getNotesByUrl(tab.url)
+
+        // Detect native Chrome PDF viewer (not our Impulse viewer)
+        const isViewer = tab.url.includes("pdfviewer.html")
+        const isPdf = isPdfUrl(tab.url) && !isViewer
+        setIsNativePdf(isPdf)
+
+        const pageNotes = await getNotesByUrl(effectiveUrl)
         setNotes(pageNotes)
       }
     } catch (e) {
@@ -251,7 +283,8 @@ export default function Sidepanel() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (tab?.url) {
-        const pageHighlights = await getHighlightsByUrl(tab.url)
+        const effectiveUrl = getEffectiveUrl(tab.url)
+        const pageHighlights = await getHighlightsByUrl(effectiveUrl)
         setHighlights(pageHighlights)
       }
     } catch (e) {
@@ -263,7 +296,8 @@ export default function Sidepanel() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (tab?.url) {
-        const session = await getChatSessionByUrl(tab.url)
+        const effectiveUrl = getEffectiveUrl(tab.url)
+        const session = await getChatSessionByUrl(effectiveUrl)
         if (session) {
           setChatMessages(session.messages)
           setChatContext(session.paperContext)
@@ -279,7 +313,8 @@ export default function Sidepanel() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (tab?.url) {
-        const stored = await getMetadataByUrl(tab.url)
+        const effectiveUrl = getEffectiveUrl(tab.url)
+        const stored = await getMetadataByUrl(effectiveUrl)
         if (stored) setMetadata(stored)
       }
     } catch (e) {
@@ -432,6 +467,24 @@ export default function Sidepanel() {
     }
   }, [])
 
+  // Listen for real-time text selection from the Impulse PDF viewer page.
+  // This gives near-instant feedback when the user selects text in pdfviewer.html,
+  // instead of waiting for the 2-second poll cycle.
+  useEffect(() => {
+    const handlePdfViewerSelection = (message: any) => {
+      if (message.type !== "PDF_VIEWER_SELECTION") return
+      const text = (message.text as string) || ""
+      if (text.length > 0) {
+        setSelectedText((prev) => (isSameText(prev, text) ? prev : text))
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(handlePdfViewerSelection)
+    return () => {
+      chrome.runtime.onMessage.removeListener(handlePdfViewerSelection)
+    }
+  }, [])
+
   const canUseSelection = useMemo(() => selectedText.trim().length > 0, [selectedText])
 
   // Mint green color scheme for assistant mode
@@ -481,6 +534,60 @@ export default function Sidepanel() {
       />
 
       <ErrorAlert error={error} onDiagnose={() => setShowBugReport(true)} />
+
+      {/* Native PDF viewer banner — prompt user to open in Impulse viewer for highlighting */}
+      {isNativePdf && (
+        <div
+          style={{
+            margin: "8px 12px 0",
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: isDark ? "#132a24" : "#ecfdf5",
+            border: `1px solid ${isDark ? "#1e3d36" : "#a7f3d0"}`,
+            fontSize: 12,
+            color: isDark ? "#d4e8e3" : "#065f46",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8
+          }}
+        >
+          <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 14 }}>📄</span>
+            Chrome 原生 PDF 查看器不支持高亮注入
+          </div>
+          <div style={{ opacity: 0.85, lineHeight: "16px" }}>
+            在 Impulse 查看器中打开此 PDF，即可使用高亮、选择文本等功能。
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+                if (tab?.url) {
+                  await chrome.runtime.sendMessage({
+                    type: "OPEN_IN_IMPULSE_VIEWER",
+                    url: tab.url
+                  })
+                }
+              } catch (e) {
+                console.error("Failed to open viewer:", e)
+              }
+            }}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 6,
+              background: "#0d9488",
+              color: "white",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+              alignSelf: "flex-start"
+            }}
+          >
+            在 Impulse 查看器中打开 →
+          </button>
+        </div>
+      )}
 
       {/* Agent Mode */}
       {mode === "agent" ? (

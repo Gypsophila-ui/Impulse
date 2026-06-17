@@ -77,18 +77,23 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "apply_highlight",
     description:
-      "将指定短语在页面上高亮显示并保存。当用户想要高亮、标记、强调某些关键内容时使用。",
+      "将指定短语在页面上高亮显示并保存。当用户想要高亮、标记、强调某些关键内容时使用。支持按分类着色：important(重要/黄)、question(疑问/红)、definition(定义/蓝)、method(方法/绿)、default(普通/橙)。",
     parameters: {
       phrases: {
         type: "array",
         items: { type: "string" },
         description: "要高亮的短语列表，每个短语应该是文本中的精确匹配"
+      },
+      category: {
+        type: "string",
+        enum: ["important", "question", "definition", "method", "default"],
+        description: "高亮分类，决定颜色。默认 default。"
       }
     },
     required: ["phrases"],
     category: "高亮管理",
-    usageHint: "用户说“高亮这段的关键词”、“标记重点”",
-    example: 'apply_highlight(phrases: ["自注意力机制", "多头注意力", "位置编码"])'
+    usageHint: "用户说“高亮这段的关键词”、“标记重点”、“把这句标为重要”",
+    example: 'apply_highlight(phrases: ["自注意力机制", "多头注意力"], category: "important")'
   },
   {
     name: "get_highlights",
