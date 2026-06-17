@@ -9,6 +9,7 @@ import summaryMd from "bundle-text:./summary/SKILL.md"
 import compareMd from "bundle-text:./compare/SKILL.md"
 import relatedMd from "bundle-text:./related-work/SKILL.md"
 import noteMd from "bundle-text:./add-note/SKILL.md"
+import relatedWorkWriterMd from "bundle-text:./related-work-writer/SKILL.md"
 
 interface SkillFrontmatter {
   trigger: string
@@ -63,4 +64,5 @@ export const SKILLS: Skill[] = [
   loadSkill(compareMd),
   loadSkill(relatedMd),
   loadSkill(noteMd),
+  loadSkill(relatedWorkWriterMd),
 ]
