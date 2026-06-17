@@ -1,5 +1,12 @@
 import initSqlJs, { type Database, type SqlJsStatic } from "sql.js"
 
+// Bundle the sql.js WASM file locally (same pattern as pdf-extractor.ts for the PDF.js worker).
+// Parcel resolves this at build time and copies the .wasm into the extension package.
+const sqlWasmUrl = new URL(
+  "sql.js/dist/sql-wasm.wasm",
+  import.meta.url
+).toString()
+
 const DB_FILENAME = "impulse.db"
 const SAVE_DEBOUNCE_MS = 2000
 
@@ -138,7 +145,7 @@ export async function initDatabase(): Promise<boolean> {
   try {
     if (!SQL) {
       SQL = await initSqlJs({
-        locateFile: (file: string) => `https://sql.js.org/dist/${file}`
+        locateFile: () => sqlWasmUrl
       })
     }
 
@@ -385,7 +392,7 @@ export async function importDatabase(data: Uint8Array): Promise<boolean> {
     }
     if (!SQL) {
       SQL = await initSqlJs({
-        locateFile: (file: string) => `https://sql.js.org/dist/${file}`
+        locateFile: () => sqlWasmUrl
       })
     }
     db = new SQL.Database(data)

@@ -8,6 +8,22 @@ const isProbablyPdfUrl = (url?: string) => {
 }
 
 /**
+ * Check if a URL is already the Impulse PDF viewer page.
+ */
+const isImpulseViewerUrl = (url?: string) => {
+  if (!url) return false
+  return url.includes("pdfviewer.html")
+}
+
+/**
+ * Build the Impulse PDF viewer URL for a given PDF source URL.
+ */
+const buildViewerUrl = (pdfUrl: string): string => {
+  const viewerUrl = chrome.runtime.getURL("pdfviewer.html")
+  return `${viewerUrl}?url=${encodeURIComponent(pdfUrl)}`
+}
+
+/**
  * Chrome 限制：`sidePanel.open()` 只能在用户手势上下文中调用。
  * 后台事件（tabs.onUpdated 等）里调用会抛错（日志已证实）。
  * 这里仅注册当前标签页的侧边栏页面；用户点击工具栏图标打开侧栏（见下方 setPanelBehavior）。
@@ -27,7 +43,7 @@ const configureSidePanelForTab = async (tabId: number) => {
 }
 
 const handleTab = (tabId: number, url?: string) => {
-  if (!isProbablyPdfUrl(url)) return
+  if (!isProbablyPdfUrl(url) && !isImpulseViewerUrl(url)) return
   void configureSidePanelForTab(tabId)
 }
 
@@ -67,7 +83,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       url: message.url,
       title: message.title
     }).catch(() => {})
+    return false
   }
+
+  // Open a PDF URL in the Impulse PDF viewer (new tab)
+  if (message.type === "OPEN_IN_IMPULSE_VIEWER") {
+    const pdfUrl = message.url as string
+    if (!pdfUrl) {
+      sendResponse({ success: false, error: "No URL provided" })
+      return false
+    }
+    const viewerUrl = buildViewerUrl(pdfUrl)
+    chrome.tabs.create({ url: viewerUrl }).then((tab) => {
+      sendResponse({ success: true, tabId: tab.id })
+    }).catch((e: any) => {
+      sendResponse({ success: false, error: e?.message ?? String(e) })
+    })
+    return true
+  }
+
   return false
 })
 
