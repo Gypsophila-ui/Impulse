@@ -62,7 +62,7 @@ const isSameText = (a: string, b: string) => a === b
  * are shared between the native PDF page and our viewer.
  */
 const getEffectiveUrl = (tabUrl: string): string => {
-  if (tabUrl.includes("pdfviewer.html")) {
+  if (tabUrl.includes("tabs/pdfviewer.html")) {
     try {
       const params = new URLSearchParams(tabUrl.split("?")[1])
       const originalUrl = params.get("url")
@@ -267,7 +267,7 @@ export default function Sidepanel() {
         setCurrentTabId(tab.id || null)
 
         // Detect native Chrome PDF viewer (not our Impulse viewer)
-        const isViewer = tab.url.includes("pdfviewer.html")
+        const isViewer = tab.url.includes("tabs/pdfviewer.html")
         const isPdf = isPdfUrl(tab.url) && !isViewer
         setIsNativePdf(isPdf)
 
@@ -482,6 +482,22 @@ export default function Sidepanel() {
     chrome.runtime.onMessage.addListener(handlePdfViewerSelection)
     return () => {
       chrome.runtime.onMessage.removeListener(handlePdfViewerSelection)
+    }
+  }, [])
+
+  // Listen for highlight updates from the context menu handler in background.ts.
+  // When the user right-clicks → "Impulse 高亮" → category, the background saves
+  // the highlight and notifies us here so we can refresh the sidebar list.
+  useEffect(() => {
+    const handleHighlightUpdated = (message: any) => {
+      if (message.type !== "HIGHLIGHT_UPDATED") return
+      // Refresh highlights from storage
+      void loadHighlights()
+    }
+
+    chrome.runtime.onMessage.addListener(handleHighlightUpdated)
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleHighlightUpdated)
     }
   }, [])
 

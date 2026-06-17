@@ -54,7 +54,7 @@
     },
     "web_accessible_resources": [
       {
-        "resources": ["pdfviewer.html"],
+        "resources": ["tabs/pdfviewer.html"],
         "matches": ["<all_urls>"]
       }
     ],
@@ -66,7 +66,8 @@
       "scripting",
       "activeTab",
       "storage",
-      "clipboardRead"
+      "clipboardRead",
+      "contextMenus"
     ]
   }
 }

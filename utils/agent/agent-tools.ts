@@ -379,7 +379,7 @@ function focusHighlightOnPage(highlightId: string): boolean {
 async function isImpulseViewerTab(tabId: number): Promise<boolean> {
   try {
     const tab = await chrome.tabs.get(tabId)
-    return !!tab.url && tab.url.includes("pdfviewer.html")
+    return !!tab.url && tab.url.includes("tabs/pdfviewer.html")
   } catch {
     return false
   }

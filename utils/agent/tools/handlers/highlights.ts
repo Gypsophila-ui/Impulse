@@ -51,6 +51,13 @@ async function handleApplyHighlight(
     }))
 
     const result = await applyHighlightsToPage(context.currentTabId, injections)
+
+    // Highlights are already saved to storage at this point. Even if page
+    // injection fails (e.g. native Chrome PDF viewer, or phrases not found in
+    // the current page DOM), the highlights are persisted and will be:
+    //   - visible in the sidebar highlight list
+    //   - auto-applied when the user opens the Impulse PDF viewer
+    // So we treat "saved but not injected" as a soft success with a helpful note.
     if (result.success && result.count > 0) {
       trackEvent("highlight", { count: result.count, source: "agent", category })
       const note = phrasesInSelection.length < validPhrases.length
@@ -62,8 +69,17 @@ async function handleApplyHighlight(
         message: `已高亮 ${result.count} 个短语${note}`
       }
     } else {
-      const errMsg = result.error || "短语未在页面中找到"
-      return { success: false, error: errMsg, message: `高亮失败：${errMsg}` }
+      // Injection failed, but highlights are saved. Provide actionable guidance.
+      trackEvent("highlight", { count: validPhrases.length, source: "agent", category, injected: 0 })
+      const isPdfUrl = /\.pdf($|\?)|\/pdf\//i.test(context.currentUrl)
+      const guidance = isPdfUrl
+        ? `已保存 ${validPhrases.length} 个高亮，但当前是原生 PDF 页面无法直接着色。请在侧边栏点击"在 Impulse 查看器中打开"，高亮将自动应用。`
+        : `已保存 ${validPhrases.length} 个高亮到侧边栏，但未能在页面中找到匹配文本（可能是 PDF 提取的文本与页面 DOM 不一致）。`
+      return {
+        success: true, // soft success — highlights are saved
+        data: { count: 0, saved: validPhrases.length, phrases: validPhrases },
+        message: guidance
+      }
     }
   } catch (e: any) {
     return { success: false, error: e?.message, message: `高亮失败：${e?.message ?? String(e)}` }

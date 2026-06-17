@@ -41,6 +41,26 @@ const CATEGORY_COLORS: Record<string, string> = {
   default: "#fed7aa"
 }
 
+/**
+ * Convert a hex color (#rgb / #rrggbb) to an rgba() string with the given alpha.
+ * Falls back to the original string if it cannot be parsed (e.g. already rgba/hsl).
+ */
+function withAlpha(hex: string, alpha: number): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return hex // already rgba/hsl/named — return as-is
+  let r: number, g: number, b: number
+  if (m[1].length === 3) {
+    r = parseInt(m[1][0] + m[1][0], 16)
+    g = parseInt(m[1][1] + m[1][1], 16)
+    b = parseInt(m[1][2] + m[1][2], 16)
+  } else {
+    r = parseInt(m[1].slice(0, 2), 16)
+    g = parseInt(m[1].slice(2, 4), 16)
+    b = parseInt(m[1].slice(4, 6), 16)
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 // ─── PDF Viewer Component ────────────────────────────────────────────────────
 
 const PdfViewer: React.FC = () => {
@@ -201,6 +221,48 @@ const PdfViewer: React.FC = () => {
     }
   }, [state.pdfDoc, state.pageNum, state.scale, state.loading, renderPage])
 
+  // ─── Auto-load saved highlights from storage when PDF is first loaded ───────
+  // This handles the case where the user was redirected from a native PDF page
+  // (e.g. arxiv.org/pdf/xxxx) after right-clicking → "Impulse 高亮". The highlight
+  // was saved to storage with the original PDF URL as key; when the viewer loads,
+  // we read those highlights and apply them to the text layer.
+  useEffect(() => {
+    if (!state.pdfDoc || state.loading || !originalPdfUrl) return
+    let cancelled = false
+
+    const loadSavedHighlights = async () => {
+      try {
+        const STORAGE_KEY = "impulse_highlights"
+        const result = await chrome.storage.local.get(STORAGE_KEY)
+        const allHighlights = result[STORAGE_KEY] || []
+        // Match highlights whose url matches the original PDF URL
+        const saved = allHighlights.filter(
+          (h: any) => h.url === originalPdfUrl && h.phrase
+        )
+        if (cancelled || saved.length === 0) return
+
+        const injections: InjectionPayload[] = saved.map((h: any) => ({
+          id: h.id,
+          phrase: h.phrase,
+          category: h.category || "default",
+          color: h.color || "#fed7aa"
+        }))
+
+        setAppliedHighlights((prev) => {
+          // Merge: avoid duplicates by id
+          const existingIds = new Set(prev.map((p) => p.id))
+          const merged = [...prev, ...injections.filter((i) => !existingIds.has(i.id))]
+          return merged
+        })
+      } catch (e) {
+        console.error("[Impulse PDF Viewer] Failed to load saved highlights:", e)
+      }
+    }
+
+    void loadSavedHighlights()
+    return () => { cancelled = true }
+  }, [state.pdfDoc, state.loading, originalPdfUrl])
+
   // ─── Highlight functions ────────────────────────────────────────────────────
 
   const applyHighlightsToTextLayer = useCallback((injections: InjectionPayload[]): number => {
@@ -228,8 +290,12 @@ const PdfViewer: React.FC = () => {
           if (injection.category) {
             span.setAttribute("data-impulse-category", injection.category)
           }
-          span.style.backgroundColor = injection.color
-          span.style.color = "transparent" // keep text selectable but invisible overlay
+          // Semi-transparent background so the PDF text underneath remains visible.
+          // mix-blend-mode: multiply blends the highlight color with the canvas
+          // text instead of covering it. Do NOT set color:transparent — the text
+          // layer is already transparent and only used for selection.
+          span.style.backgroundColor = withAlpha(injection.color, 0.4)
+          span.style.mixBlendMode = "multiply"
           span.style.borderRadius = "2px"
           span.style.padding = "0 1px"
           count++
@@ -257,7 +323,8 @@ const PdfViewer: React.FC = () => {
               if (injection.category) {
                 span.setAttribute("data-impulse-category", injection.category)
               }
-              span.style.backgroundColor = injection.color
+              span.style.backgroundColor = withAlpha(injection.color, 0.4)
+              span.style.mixBlendMode = "multiply"
               span.style.borderRadius = "2px"
               span.style.padding = "0 1px"
               count++
@@ -294,6 +361,7 @@ const PdfViewer: React.FC = () => {
       el.removeAttribute("data-impulse-id")
       el.removeAttribute("data-impulse-category")
       el.style.backgroundColor = ""
+      el.style.mixBlendMode = ""
       el.style.borderRadius = ""
       el.style.padding = ""
     }
@@ -328,9 +396,53 @@ const PdfViewer: React.FC = () => {
       if (message.type === "APPLY_HIGHLIGHTS") {
         try {
           const injections = (message.injections || []) as InjectionPayload[]
-          setAppliedHighlights(injections)
-          const count = injections.length > 0 ? applyHighlightsToTextLayer(injections) : 0
-          sendResponse({ success: count > 0, count })
+          if (injections.length === 0) {
+            sendResponse({ success: false, count: 0, error: "没有可应用的高亮" })
+            return true
+          }
+
+          // Merge new injections into appliedHighlights state (so they persist
+          // across page re-renders). Deduplicate by id.
+          setAppliedHighlights((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id))
+            const merged = [...prev, ...injections.filter((i) => !existingIds.has(i.id))]
+            return merged
+          })
+
+          // Try to apply immediately. If the text layer isn't ready (PDF still
+          // loading or rendering), the highlights will be applied automatically
+          // when renderPage completes, because it re-applies appliedHighlights.
+          const count = applyHighlightsToTextLayer(injections)
+
+          // If count is 0, the text layer may not be ready yet. Try a few retries
+          // with a short delay — the text layer is populated asynchronously.
+          if (count === 0) {
+            let retries = 0
+            const maxRetries = 5
+            const retryDelay = 300
+            const tryApply = () => {
+              retries++
+              const retryCount = applyHighlightsToTextLayer(injections)
+              if (retryCount > 0) {
+                sendResponse({ success: true, count: retryCount })
+              } else if (retries < maxRetries) {
+                setTimeout(tryApply, retryDelay)
+              } else {
+                // Text layer still not ready — but highlights are saved in state
+                // and will be applied when renderPage finishes. Report success
+                // so the caller (agent/sidebar) doesn't treat it as a failure.
+                sendResponse({
+                  success: true,
+                  count: 0,
+                  note: "文本层尚未就绪，高亮将在页面渲染完成后自动应用"
+                })
+              }
+            }
+            setTimeout(tryApply, retryDelay)
+            return true // keep the message channel open for the async retry
+          }
+
+          sendResponse({ success: true, count })
         } catch (e: any) {
           sendResponse({ success: false, error: e?.message ?? String(e) })
         }
