@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react"
 import * as pdfjs from "pdfjs-dist"
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, AlertCircle, Highlighter } from "lucide-react"
-
 // Configure PDF.js worker (same approach as pdf-extractor.ts)
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -168,7 +167,14 @@ const PdfViewer: React.FC = () => {
         transform: transform as any
       } as any).promise
 
-      // Render text layer
+      // Render text layer — manually positioned spans.
+      // Use viewport.transform to convert PDF coordinates to screen coordinates.
+      // The viewport transform is [a, b, c, d, e, f] where:
+      //   screenX = a*x + c*y + e
+      //   screenY = b*x + d*y + f
+      // This correctly handles scale, Y-axis flip, and rotation — unlike the
+      // previous formula (viewport.height - y) * scale which double-applied
+      // scale to the viewport height component.
       const textLayer = textLayerRef.current
       textLayer.innerHTML = ""
       textLayer.style.width = `${Math.floor(viewport.width)}px`
@@ -176,28 +182,32 @@ const PdfViewer: React.FC = () => {
       textLayer.style.setProperty("--scale-factor", String(scale))
 
       const textContent = await page.getTextContent()
+      const [va, vb, vc, vd, ve, vf] = viewport.transform
 
-      // Manually render text layer spans (compatible with PDF.js v5)
-      // Each text item becomes a positioned <span> that supports selection
       for (const item of textContent.items) {
         if (!("str" in item) || !item.str) continue
 
         const tx = item.transform as number[]
         const fontHeight = Math.hypot(tx[2], tx[3])
-        const x = tx[4]
-        const y = tx[5]
+        const pdfX = tx[4]
+        const pdfY = tx[5]
+
+        // Convert PDF coords → viewport (screen) coords
+        const screenX = va * pdfX + vc * pdfY + ve
+        const screenY = vb * pdfX + vd * pdfY + vf
 
         const span = document.createElement("span")
         span.textContent = item.str
         span.style.position = "absolute"
-        span.style.left = `${x * scale}px`
-        span.style.top = `${(viewport.height - y) * scale}px`
+        span.style.left = `${screenX}px`
+        span.style.top = `${screenY}px`
         span.style.fontSize = `${fontHeight * scale}px`
         span.style.fontFamily = "sans-serif"
         span.style.color = "transparent"
         span.style.whiteSpace = "pre"
         span.style.cursor = "text"
         span.style.transformOrigin = "0% 0%"
+        span.style.lineHeight = "1"
         // Store original text for highlight matching
         span.dataset.text = item.str
         textLayer.appendChild(span)

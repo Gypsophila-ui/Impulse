@@ -81,17 +81,27 @@ export default function Sidepanel() {
 
   const [selectedText, setSelectedText] = useState("")
 
-  const [output, setOutput] = useState<React.ReactNode>("")
-  const [outputType, setOutputType] = useState<"success" | "warning" | "error" | "">("")
+  // Per-tab output state — each tab has its own independent output area
+  const [tabOutputs, setTabOutputs] = useState<
+    Record<TabKey, { message: React.ReactNode; type: "success" | "warning" | "error" | "" }>
+  >({
+    summary: { message: "", type: "" },
+    translation: { message: "", type: "" },
+    highlight: { message: "", type: "" },
+    comment: { message: "", type: "" },
+    qa: { message: "", type: "" }
+  })
+
+  // Derived: current tab's output
+  const output = tabOutputs[activeTab]?.message ?? ""
+  const outputType = tabOutputs[activeTab]?.type ?? ""
 
   const showMessage = (message: React.ReactNode, type: "success" | "warning" | "error") => {
-    setOutput(message)
-    setOutputType(type)
+    setTabOutputs((prev) => ({ ...prev, [activeTab]: { message, type } }))
   }
 
   const clearMessage = () => {
-    setOutput("")
-    setOutputType("")
+    setTabOutputs((prev) => ({ ...prev, [activeTab]: { message: "", type: "" } }))
   }
 
   const [commentDraft, setCommentDraft] = useState("")
@@ -103,6 +113,7 @@ export default function Sidepanel() {
   const [notes, setNotes] = useState<Note[]>([])
   const [currentUrl, setCurrentUrl] = useState("")
   const [currentTitle, setCurrentTitle] = useState("")
+  const [rawTabUrl, setRawTabUrl] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
 
@@ -112,8 +123,9 @@ export default function Sidepanel() {
   const [applyingHighlights, setApplyingHighlights] = useState(false)
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
 
-  // True when the active tab is a native Chrome PDF viewer (not our Impulse viewer)
-  const [isNativePdf, setIsNativePdf] = useState(false)
+  // Derived: true when the active tab is a native Chrome PDF viewer (not our Impulse viewer).
+  // Computed from rawTabUrl which is updated every 2s by fetchSelection polling.
+  const isNativePdf = rawTabUrl ? isPdfUrl(rawTabUrl) && !rawTabUrl.includes("tabs/pdfviewer.html") : false
 
   // Q&A Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -245,6 +257,11 @@ export default function Sidepanel() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) return
 
+      // Keep rawTabUrl in sync so isNativePdf (derived) stays correct
+      if (tab.url) {
+        setRawTabUrl(tab.url)
+      }
+
       const text = await getSelectionInTab(tab.id)
 
       if (text) {
@@ -265,11 +282,7 @@ export default function Sidepanel() {
         setCurrentUrl(effectiveUrl)
         setCurrentTitle(tab.title || "Untitled")
         setCurrentTabId(tab.id || null)
-
-        // Detect native Chrome PDF viewer (not our Impulse viewer)
-        const isViewer = tab.url.includes("tabs/pdfviewer.html")
-        const isPdf = isPdfUrl(tab.url) && !isViewer
-        setIsNativePdf(isPdf)
+        setRawTabUrl(tab.url)
 
         const pageNotes = await getNotesByUrl(effectiveUrl)
         setNotes(pageNotes)
