@@ -249,6 +249,36 @@ export async function saveHighlights(
 }
 
 /**
+ * Save highlights where each phrase can have its own category.
+ * Used by the agent apply_highlight tool when called with `items`.
+ */
+export async function saveHighlightsWithCategories(
+  items: Array<{ phrase: string; category: HighlightCategory }>,
+  sourceText: string,
+  url: string,
+  pageTitle: string
+): Promise<Highlight[]> {
+  const highlights = await getAllHighlights()
+  const newHighlights: Highlight[] = items.map(({ phrase, category }) => ({
+    id: generateHighlightId(),
+    phrase,
+    sourceText,
+    url,
+    pageTitle,
+    timestamp: Date.now(),
+    color: getHighlightColor(category),
+    category
+  }))
+
+  highlights.push(...newHighlights)
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.HIGHLIGHTS]: highlights
+  })
+
+  return newHighlights
+}
+
+/**
  * Delete a highlight
  */
 export async function deleteHighlight(id: string): Promise<void> {

@@ -77,23 +77,42 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
   {
     name: "apply_highlight",
     description:
-      "将指定短语在页面上高亮显示并保存。当用户想要高亮、标记、强调某些关键内容时使用。支持按分类着色：important(重要/黄)、question(疑问/红)、definition(定义/蓝)、method(方法/绿)、default(普通/橙)。",
+      "将指定短语/段落按分类在页面上高亮显示并保存。支持两种调用方式：(1) 传 items 数组，每项可指定独立分类（推荐，用于混合标记）；(2) 传 phrases + category，所有短语共用同一分类。当用户想要高亮、标记、强调某些关键内容时使用。分类：important(重要/黄)、question(疑问/红)、definition(定义/蓝)、method(方法/绿)、default(普通/橙)。",
     parameters: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            phrase: {
+              type: "string",
+              description: "要高亮的文本片段，应是文本中的精确匹配（可以是关键词、句子或段落）"
+            },
+            category: {
+              type: "string",
+              enum: ["important", "question", "definition", "method", "default"],
+              description: "该项的分类，决定颜色。默认 default。"
+            }
+          },
+          required: ["phrase"]
+        },
+        description: "高亮项列表（推荐），每项可独立指定分类。与 phrases 互斥，优先使用 items。"
+      },
       phrases: {
         type: "array",
         items: { type: "string" },
-        description: "要高亮的短语列表，每个短语应该是文本中的精确匹配"
+        description: "要高亮的短语列表（旧模式，所有共用 category）。与 items 互斥。"
       },
       category: {
         type: "string",
         enum: ["important", "question", "definition", "method", "default"],
-        description: "高亮分类，决定颜色。默认 default。"
+        description: "全局分类（仅与 phrases 搭配使用），默认 default。"
       }
     },
-    required: ["phrases"],
+    required: [],
     category: "高亮管理",
-    usageHint: "用户说“高亮这段的关键词”、“标记重点”、“把这句标为重要”",
-    example: 'apply_highlight(phrases: ["自注意力机制", "多头注意力"], category: "important")'
+    usageHint: "用户说“高亮这段的关键词”、“标记重点”、“把这句标为重要”、“分别标记方法和定义”",
+    example: 'apply_highlight(items: [{phrase: "自注意力机制", category: "method"}, {phrase: "核心创新", category: "important"}])'
   },
   {
     name: "get_highlights",

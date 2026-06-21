@@ -1,21 +1,80 @@
 import {
   getHighlightsByUrl,
-  saveHighlights
+  saveHighlights,
+  saveHighlightsWithCategories
 } from "~utils/storage/storage"
 import { applyHighlightsToPage } from "../../agent-tools"
 import { trackEvent } from "~utils/reading/reading-tracker"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
 import type { ToolHandler } from "../registry"
+import type { HighlightCategory } from "~utils/storage/storage"
+
+interface HighlightItem {
+  phrase: string
+  category?: string
+}
+
+/**
+ * Normalize args from the LLM into a list of {phrase, category} items.
+ * Supports two calling conventions:
+ *   - items: [{phrase, category}, ...]  (preferred, per-item category)
+ *   - phrases: [...] + category         (legacy, shared category)
+ */
+function normalizeHighlightArgs(args: Record<string, unknown>): {
+  items: HighlightItem[]
+  error?: string
+} {
+  const rawItems = args.items as HighlightItem[] | undefined
+  const rawPhrases = args.phrases as string[] | undefined
+  const globalCategory = (args.category as string | undefined) || "default"
+
+  const VALID_CATEGORIES = new Set([
+    "important", "question", "definition", "method", "default"
+  ])
+
+  function coerceCategory(v: unknown): HighlightCategory {
+    return VALID_CATEGORIES.has(v as string) ? (v as HighlightCategory) : "default"
+  }
+
+  // Prefer `items` if provided
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    const items: HighlightItem[] = rawItems
+      .filter((it) => it && typeof it === "object" && typeof it.phrase === "string" && it.phrase.trim())
+      .map((it) => ({
+        phrase: (it.phrase as string).trim(),
+        category: coerceCategory(it.category)
+      }))
+    if (items.length === 0) {
+      return { items: [], error: "items 中没有有效的 phrase" }
+    }
+    return { items }
+  }
+
+  // Fallback to `phrases` + `category`
+  if (Array.isArray(rawPhrases) && rawPhrases.length > 0) {
+    const items: HighlightItem[] = rawPhrases
+      .filter((p) => typeof p === "string" && p.trim())
+      .map((p) => ({
+        phrase: (p as string).trim(),
+        category: coerceCategory(globalCategory)
+      }))
+    if (items.length === 0) {
+      return { items: [], error: "没有有效的 phrase" }
+    }
+    return { items }
+  }
+
+  return { items: [], error: "没有指定要高亮的短语（items 或 phrases）" }
+}
 
 async function handleApplyHighlight(
   args: Record<string, unknown>,
   context: ToolExecutionContext,
   _onStatus?: ToolExecutionCallback
 ): Promise<ToolResult> {
-  const phrases = args.phrases as string[]
-  const category = (args.category as string | undefined) || "default"
-  if (!phrases?.length) {
-    return { success: false, error: "没有指定要高亮的短语", message: "高亮失败：没有指定短语" }
+  const { items, error } = normalizeHighlightArgs(args)
+  if (error || items.length === 0) {
+    return { success: false, error: error || "没有指定要高亮的短语", message: `高亮失败：${error}` }
   }
   if (!context.currentTabId) {
     return { success: false, error: "无法获取当前标签页", message: "高亮失败：无法访问页面" }
@@ -23,25 +82,27 @@ async function handleApplyHighlight(
   const effectiveText = context.selectedText?.trim() || context.paperText?.trim() || ""
 
   try {
-    const validPhrases = phrases.filter(
-      (p) => typeof p === "string" && p.trim().length > 0
-    )
-    if (validPhrases.length === 0) {
-      return { success: false, error: "没有有效的短语", message: "高亮失败：没有有效的短语" }
-    }
-
     const phrasesInSelection = effectiveText
-      ? validPhrases.filter((p) => effectiveText.includes(p))
-      : []
+      ? items.filter((it) => effectiveText.includes(it.phrase)).length
+      : 0
 
-    // Save first so we get stable IDs, then inject with those IDs
-    const savedHighlights = await saveHighlights(
-      validPhrases,
+    // Save with per-item categories
+    const savedHighlights = await saveHighlightsWithCategories(
+      items.map((it) => ({
+        phrase: it.phrase,
+        category: (it.category as HighlightCategory) || "default"
+      })),
       effectiveText || "页面内容",
       context.currentUrl,
-      context.currentTitle,
-      category as any
+      context.currentTitle
     )
+
+    // Notify the side panel to refresh its Highlight tab list.
+    try {
+      await chrome.runtime.sendMessage({ type: "HIGHLIGHT_UPDATED" })
+    } catch {
+      // Side panel may not be open — ignore
+    }
 
     const injections = savedHighlights.map((h) => ({
       id: h.id,
@@ -59,25 +120,34 @@ async function handleApplyHighlight(
     //   - auto-applied when the user opens the Impulse PDF viewer
     // So we treat "saved but not injected" as a soft success with a helpful note.
     if (result.success && result.count > 0) {
-      trackEvent("highlight", { count: result.count, source: "agent", category })
-      const note = phrasesInSelection.length < validPhrases.length
-        ? `（其中 ${phrasesInSelection.length} 个在可用文本中）`
+      trackEvent("highlight", { count: result.count, source: "agent" })
+      const note = phrasesInSelection < items.length
+        ? `（其中 ${phrasesInSelection} 个在可用文本中）`
         : ""
+      // Summarize categories used
+      const catSummary = items.reduce<Record<string, number>>((acc, it) => {
+        const c = it.category || "default"
+        acc[c] = (acc[c] || 0) + 1
+        return acc
+      }, {})
+      const catStr = Object.entries(catSummary)
+        .map(([c, n]) => `${c}:${n}`)
+        .join(", ")
       return {
         success: true,
-        data: { count: result.count, phrases: validPhrases.slice(0, result.count) },
-        message: `已高亮 ${result.count} 个短语${note}`
+        data: { count: result.count, phrases: injections.slice(0, result.count).map((i) => i.phrase), categories: catStr },
+        message: `已高亮 ${result.count} 个短语${note} [${catStr}]`
       }
     } else {
       // Injection failed, but highlights are saved. Provide actionable guidance.
-      trackEvent("highlight", { count: validPhrases.length, source: "agent", category, injected: 0 })
+      trackEvent("highlight", { count: items.length, source: "agent", injected: 0 })
       const isPdfUrl = /\.pdf($|\?)|\/pdf\//i.test(context.currentUrl)
       const guidance = isPdfUrl
-        ? `已保存 ${validPhrases.length} 个高亮，但当前是原生 PDF 页面无法直接着色。请在侧边栏点击"在 Impulse 查看器中打开"，高亮将自动应用。`
-        : `已保存 ${validPhrases.length} 个高亮到侧边栏，但未能在页面中找到匹配文本（可能是 PDF 提取的文本与页面 DOM 不一致）。`
+        ? `已保存 ${items.length} 个高亮，但当前是原生 PDF 页面无法直接着色。请在侧边栏点击"在 Impulse 查看器中打开"，高亮将自动应用。`
+        : `已保存 ${items.length} 个高亮到侧边栏，但未能在页面中找到匹配文本（可能是 PDF 提取的文本与页面 DOM 不一致）。`
       return {
         success: true, // soft success — highlights are saved
-        data: { count: 0, saved: validPhrases.length, phrases: validPhrases },
+        data: { count: 0, saved: items.length, phrases: items.map((i) => i.phrase) },
         message: guidance
       }
     }
