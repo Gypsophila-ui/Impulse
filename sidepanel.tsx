@@ -354,7 +354,27 @@ export default function Sidepanel() {
     const interval = setInterval(() => {
       void fetchSelection()
     }, 2000)
-    return () => clearInterval(interval)
+
+    // Immediately update rawTabUrl when the active tab changes or its URL updates,
+    // so isNativePdf (derived) reflects the current tab without waiting for the
+    // next 2-second polling cycle. This makes the native-PDF banner disappear
+    // instantly when the user switches to the Impulse viewer tab.
+    const onActivated = () => {
+      void fetchSelection()
+    }
+    const onUpdated = (_tabId: number, _info: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
+      if (tab.active && tab.url) {
+        setRawTabUrl(tab.url)
+      }
+    }
+    chrome.tabs.onActivated.addListener(onActivated)
+    chrome.tabs.onUpdated.addListener(onUpdated)
+
+    return () => {
+      clearInterval(interval)
+      chrome.tabs.onActivated.removeListener(onActivated)
+      chrome.tabs.onUpdated.removeListener(onUpdated)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

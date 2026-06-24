@@ -515,12 +515,46 @@ export async function executeToolCall(
 
 // ─── Format tool results for LLM consumption ─────────────────────────────
 
+/**
+ * Maximum length of a tool result string sent to the LLM. Truncating prevents
+ * the request body from growing too large after multiple tool calls, which can
+ * trigger "unexpected end of hex escape" JSON parse errors on some providers
+ * (notably DeepSeek) when the body exceeds ~60K characters.
+ */
+const MAX_TOOL_RESULT_LENGTH = 8000
+
+/**
+ * Remove control characters and lone surrogate halves that can break JSON
+ * serialization on the API server side. Also collapses runs of whitespace
+ * to keep the payload compact.
+ */
+function sanitizeForApi(text: string): string {
+  // Remove lone surrogates and control chars (except \n, \t)
+  // eslint-disable-next-line no-control-regex
+  let cleaned = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFFF]/g, "")
+  // Collapse 3+ newlines into 2
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n")
+  return cleaned
+}
+
 export function formatToolResultForLLM(result: ToolResult): string {
+  let text: string
   if (result.success) {
     if (typeof result.data === "string") {
-      return result.data
+      text = result.data
+    } else {
+      text = JSON.stringify(result.data, null, 2)
     }
-    return JSON.stringify(result.data, null, 2)
+  } else {
+    text = `Error: ${result.error || result.message}`
   }
-  return `Error: ${result.error || result.message}`
+
+  text = sanitizeForApi(text)
+
+  // Truncate to prevent oversized request bodies
+  if (text.length > MAX_TOOL_RESULT_LENGTH) {
+    text = text.slice(0, MAX_TOOL_RESULT_LENGTH) + "\n...[结果已截断]"
+  }
+
+  return text
 }

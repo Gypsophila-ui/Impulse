@@ -422,18 +422,18 @@ ${goalPrompt}
         max_tokens: 8000
       })
     } catch (e: any) {
+      // Only fall back to plain chat when the model genuinely doesn't support
+      // tool/function calling. We must NOT treat every 400 error as "unsupported"
+      // because 400 also covers JSON parse errors, message-too-long, invalid
+      // characters, etc. — those need to surface as real errors.
+      const msg: string = (e?.message ?? e?.error?.message ?? "").toLowerCase()
       const isToolCallingUnsupported =
-        e?.status === 400 ||
-        e?.status === 404 ||
-        e?.error?.type === "invalid_request_error" ||
         e?.error?.type === "unsupported_parameter" ||
-        (e?.message && (
-          e.message.includes("tool") ||
-          e.message.includes("function") ||
-          e.message.includes("unsupported") ||
-          e.message.includes("not supported") ||
-          e.message.includes("does not support")
-        ))
+        msg.includes("does not support") ||
+        msg.includes("tool_call") && msg.includes("not") ||
+        msg.includes("function_call") && msg.includes("not") ||
+        msg.includes("tools are not supported") ||
+        msg.includes("function calling is not supported")
 
       if (isToolCallingUnsupported) {
         onStatus?.("模型不支持工具调用，使用普通对话", "complete")
