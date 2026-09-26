@@ -1,8 +1,25 @@
 ---
-name: add-note
 trigger: note
 label: 添加笔记
 description: 将选中文字保存为笔记并自动生成评论
+detailedDescription: 将用户选中的文字保存为结构化笔记并自动生成评论，可选将选中内容以默认分类高亮到页面。
+examples:
+  - "保存这条笔记"
+  - "把这段记为笔记"
+  - "添加笔记"
+inputExpectations: 已选中的文本
+outputFormat: 笔记保存确认 + 评论摘要 + 可选高亮确认
+category: 笔记管理
+tags:
+  - 笔记
+  - 高亮
+suggestedReadingGoal: find_details
+toolsUsed:
+  - save_note
+  - apply_highlight
+permissions:
+  - scripting
+requiresHostPermission: true
 ---
 
 # 添加笔记

@@ -1,4 +1,4 @@
-import type { AskUserQuestionCallback } from "~types"
+import type { AskUserQuestionCallback, ShowSkillPermissionNoticeCallback } from "~types"
 import type { HighlightCategory } from "~utils/storage/storage"
 import { getHighlightColor } from "~utils/storage/storage"
 
@@ -11,6 +11,7 @@ export interface ToolExecutionContext {
   currentTitle: string
   currentTabId: number | null
   askUserQuestion?: AskUserQuestionCallback
+  showPermissionNotice?: ShowSkillPermissionNoticeCallback
   /** Reading history summary for system prompt injection (null when DB not initialized) */
   readingSummary?: import("~types").ReadingSummaryBrief | null
   /** Reading stats for the current URL */
@@ -524,14 +525,23 @@ export async function executeToolCall(
 const MAX_TOOL_RESULT_LENGTH = 8000
 
 /**
- * Remove control characters and lone surrogate halves that can break JSON
- * serialization on the API server side. Also collapses runs of whitespace
- * to keep the payload compact.
+ * Remove control characters and LONE surrogate halves that can break JSON
+ * serialization on the API server side (notably DeepSeek's "unexpected end of
+ * hex escape" error). Valid surrogate pairs (emoji) are preserved.
  */
-function sanitizeForApi(text: string): string {
-  // Remove lone surrogates and control chars (except \n, \t)
+export function sanitizeForApi(text: string): string {
+  // Remove control chars (except \n \t \r)
   // eslint-disable-next-line no-control-regex
-  let cleaned = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFFF]/g, "")
+  let cleaned = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
+  // Remove LONE surrogate halves only — keep valid pairs (emoji).
+  // A valid pair is [\uD800-\uDBFF] immediately followed by [\uDC00-\uDFFF].
+  // The two alternations below match:
+  //   1. A low surrogate NOT preceded by a high surrogate
+  //   2. A high surrogate NOT followed by a low surrogate
+  cleaned = cleaned.replace(
+    /(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g,
+    ""
+  )
   // Collapse 3+ newlines into 2
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n")
   return cleaned

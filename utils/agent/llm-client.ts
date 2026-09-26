@@ -5,11 +5,13 @@ import type { AgentChatResult, AgentStatusCallback, ChatMessage, ComparisonDimen
 import {
   executeToolCall,
   formatToolResultForLLM,
+  sanitizeForApi,
   type ToolExecutionContext,
   type ToolResult
 } from "./agent-tools"
 import { PAPER_TOOLS, getToolPrompt } from "./tool-definitions"
 import { getLLMConfig } from "~utils/storage/storage"
+import { getSkillCatalogText } from "~utils/skills"
 
 let openaiClient: OpenAI | null = null
 
@@ -356,7 +358,7 @@ export async function agentChat(
 
   const systemMessage = {
     role: "system" as const,
-    content: `你是一个专业的学术论文阅读与研究助手 Agent，专注于帮助用户高效阅读和理解学术论文。
+    content: sanitizeForApi(`你是一个专业的学术论文阅读与研究助手 Agent，专注于帮助用户高效阅读和理解学术论文。
 
 # 核心能力
 - 分析和总结论文内容
@@ -368,6 +370,8 @@ export async function agentChat(
 # 可用工具说明
 
 ${getToolPrompt()}
+
+${getSkillCatalogText()}
 ${summarySection}
 
 # 当前上下文
@@ -395,14 +399,14 @@ ${goalPrompt}
 - **明确边界**：如果问题超出论文范围或当前上下文不足，明确说明并建议用户提供更多信息
 - **阅读历史感知**：你可以了解用户的论文阅读历史（最近读过的论文、阅读时长等）。在对比论文、推荐阅读、或用户询问阅读习惯时，主动利用阅读历史数据提供更有针对性的建议
 
-请根据用户需求灵活运用工具和能力，提供专业的学术阅读辅助服务。`
+请根据用户需求灵活运用工具和能力，提供专业的学术阅读辅助服务。`)
   }
 
   const apiMessages: ChatCompletionMessageParam[] = [
     systemMessage,
     ...processedMessages.map((m) => ({
       role: m.role as "user" | "assistant",
-      content: m.content
+      content: sanitizeForApi(m.content)
     }))
   ]
 
@@ -475,7 +479,7 @@ ${goalPrompt}
 
     apiMessages.push({
       role: "assistant",
-      content: assistantMessage.content,
+      content: assistantMessage.content ? sanitizeForApi(assistantMessage.content) : assistantMessage.content,
       tool_calls: assistantMessage.tool_calls.map((tc) => ({
         id: tc.id,
         type: tc.type,

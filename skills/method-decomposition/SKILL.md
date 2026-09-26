@@ -1,8 +1,25 @@
 ---
-name: method-decomposition
 trigger: method
 label: 方法拆解
 description: 将论文方法逐步拆解，解释每步的做什么和为什么
+detailedDescription: 将论文方法拆分为有序步骤序列，解释每一步在做什么以及为什么这样设计，并标注关键方法术语。
+examples:
+  - "拆解这个方法"
+  - "解释论文方法的每一步"
+  - "把方法步骤化"
+inputExpectations: 论文方法章节或选中的方法段落
+outputFormat: Step 1..N（做什么 / 为什么） + 方法术语高亮列表
+category: 方法分析
+tags:
+  - 方法
+  - 拆解
+suggestedReadingGoal: understand_method
+toolsUsed:
+  - summarize_selection
+  - apply_highlight
+permissions:
+  - scripting
+requiresHostPermission: true
 ---
 
 # 方法拆解

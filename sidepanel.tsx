@@ -12,12 +12,13 @@ import {
   HighlightTab,
   MetadataCard,
   NotesTab,
+  PermissionNoticeModal,
   QATab,
   SummaryTab,
   TranslationTab
 } from "./components"
 
-import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, Language, PaperMetadata, ReadingGoal, Theme } from "./types"
+import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, Language, PaperMetadata, ReadingGoal, SkillPermissionNotice, Theme } from "./types"
 import { downloadMarkdown, generateMarkdown } from "./utils/ui/export"
 import { getSelectionInTab } from "./utils/reading/get-selection"
 import { isPdfUrl } from "./utils/reading/pdf-extractor"
@@ -149,6 +150,10 @@ export default function Sidepanel() {
   const [askQuestionParams, setAskQuestionParams] = useState<AskUserQuestionParams | null>(null)
   const [askQuestionResolve, setAskQuestionResolve] = useState<((result: AskUserQuestionResult) => void) | null>(null)
 
+  // Skill permission notice state
+  const [permissionNotice, setPermissionNotice] = useState<SkillPermissionNotice | null>(null)
+  const [permissionNoticeResolve, setPermissionNoticeResolve] = useState<(() => void) | null>(null)
+
   // Ask User Question callback
   const handleAskUserQuestion = async (params: AskUserQuestionParams): Promise<AskUserQuestionResult> => {
     return new Promise((resolve) => {
@@ -167,6 +172,20 @@ export default function Sidepanel() {
     setAskQuestionParams(null)
     setAskQuestionResolve(null)
     askQuestionResolve?.({ selected: "", isCustomInput: false })
+  }
+
+  // Skill permission notice callback
+  const handleShowPermissionNotice = async (notice: SkillPermissionNotice): Promise<void> => {
+    return new Promise((resolve) => {
+      setPermissionNotice(notice)
+      setPermissionNoticeResolve(() => resolve)
+    })
+  }
+
+  const handlePermissionNoticeClose = () => {
+    setPermissionNotice(null)
+    setPermissionNoticeResolve(null)
+    permissionNoticeResolve?.()
   }
 
   // Auto-fix handler for AI diagnosis
@@ -666,6 +685,7 @@ export default function Sidepanel() {
           onSetChatSummary={setChatSummary}
           onSetReadingGoal={setReadingGoal}
           onAskUserQuestion={handleAskUserQuestion}
+          onShowPermissionNotice={handleShowPermissionNotice}
           onScrollChange={setScrolled}
         />
       ) : (
@@ -844,6 +864,18 @@ export default function Sidepanel() {
           params={askQuestionParams}
           onSubmit={handleAskQuestionSubmit}
           onCancel={handleAskQuestionCancel}
+          isDark={isDark}
+        />
+      )}
+
+      {/* Skill Permission Notice Modal */}
+      {permissionNotice && (
+        <PermissionNoticeModal
+          skillName={permissionNotice.skillName}
+          message={permissionNotice.message}
+          permissions={permissionNotice.permissions}
+          origins={permissionNotice.origins}
+          onClose={handlePermissionNoticeClose}
           isDark={isDark}
         />
       )}

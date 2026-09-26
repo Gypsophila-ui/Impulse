@@ -1,8 +1,28 @@
 ---
-name: contribution-extractor
 trigger: contribution
 label: 贡献速览
 description: 提取论文的核心问题、方法和结果
+detailedDescription: 从论文中提取 Problem（问题）、Method（方法）、Result（结果）三个核心维度，并自动将关键短语标注到页面。
+examples:
+  - "这篇论文的贡献是什么"
+  - "提取核心问题、方法和结果"
+  - "用问题-方法-结果框架分析"
+inputExpectations: 论文全文或选中的段落
+outputFormat: 问题 / 方法 / 结果三段分析 + 已高亮短语列表
+category: 贡献分析
+tags:
+  - 贡献
+  - 方法
+  - 实验
+suggestedReadingGoal: evaluate_novelty
+toolsUsed:
+  - extract_paper_metadata
+  - summarize_selection
+  - get_highlights
+  - apply_highlight
+permissions:
+  - scripting
+requiresHostPermission: true
 ---
 
 # 贡献速览

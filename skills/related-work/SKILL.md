@@ -1,8 +1,28 @@
 ---
-name: related-work
 trigger: related
 label: 相关工作
 description: 梳理论文引用的相关工作脉络，理清研究领域的发展脉络
+detailedDescription: 梳理论文 Related Work 部分，结合阅读历史，理清领域研究方向、直接相关工作与本文改进点，并标注关键引用。
+examples:
+  - "梳理相关工作"
+  - "这篇论文的领域脉络是什么"
+  - "相关工作有哪些"
+inputExpectations: 论文 Related Work 章节或全文
+outputFormat: 研究方向 / 直接相关工作 / 核心改进点 + 关键引用高亮
+category: 相关工作
+tags:
+  - 相关工作
+  - 引用
+  - 脉络
+suggestedReadingGoal: prepare_citation
+toolsUsed:
+  - summarize_selection
+  - get_reading_history
+  - list_candidate_papers
+  - apply_highlight
+permissions:
+  - scripting
+requiresHostPermission: true
 ---
 
 # 相关工作梳理

@@ -106,7 +106,13 @@ const translations: Record<Language, Record<string, string>> = {
     "options.themeLabel": "Theme",
     "options.themLight": "Light",
     "options.themeDark": "Dark",
-    "options.privacy": "Your API key is stored locally and never sent to our servers"
+    "options.privacy": "Your API key is stored locally and never sent to our servers",
+
+    // Agent skills
+    "agent.skillCatalogHeader": "Available Skills",
+    "agent.permissionNoticeTitle": "Permission Required",
+    "agent.permissionNoticeOpenSettings": "Open Extension Settings",
+    "agent.skillRecommended": "Recommended skill"
   },
 
   zh: {
@@ -214,7 +220,13 @@ const translations: Record<Language, Record<string, string>> = {
     "options.themeLabel": "主题",
     "options.themLight": "浅色",
     "options.themeDark": "深色",
-    "options.privacy": "API Key 仅存储在本地，不会发送到我们的服务器"
+    "options.privacy": "API Key 仅存储在本地，不会发送到我们的服务器",
+
+    // Agent skills
+    "agent.skillCatalogHeader": "可用技能",
+    "agent.permissionNoticeTitle": "权限不足",
+    "agent.permissionNoticeOpenSettings": "去扩展设置开启",
+    "agent.skillRecommended": "推荐技能"
   }
 }
 

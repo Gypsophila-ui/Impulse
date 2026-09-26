@@ -107,12 +107,37 @@ export type Theme = "light" | "dark"
 export type Language = "en" | "zh"
 
 // Skill — slash-command shortcut for Agent chat input
+export type SkillPermission = "scripting" | "activeTab" | "storage" | "sidePanel" | "contextMenus"
+
 export interface Skill {
   trigger: string
   label: string
   description: string
   prompt: string
+
+  // Rich metadata for discovery and Agent system prompt
+  detailedDescription?: string
+  examples?: string[]
+  inputExpectations?: string
+  outputFormat?: string
+  suggestedReadingGoal?: ReadingGoal
+  tags?: string[]
+  category?: string
+  toolsUsed?: string[]
+
+  // Runtime permission requirements
+  permissions?: SkillPermission[]
+  requiresHostPermission?: boolean
 }
+
+export interface SkillPermissionNotice {
+  skillName: string
+  permissions: string[]
+  origins: string[]
+  message: string
+}
+
+export type ShowSkillPermissionNoticeCallback = (notice: SkillPermissionNotice) => Promise<void>
 
 // Reading Goal - 阅读目标设定
 export type ReadingGoal = "understand_method" | "find_details" | "evaluate_novelty" | "prepare_citation"

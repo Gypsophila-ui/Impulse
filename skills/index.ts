@@ -1,4 +1,5 @@
-import type { Skill } from "~types"
+import type { Skill, SkillPermission, ReadingGoal } from "~types"
+import * as yaml from "js-yaml"
 
 // Static imports — Parcel's bundle-text: scheme loads .md files as raw strings at build time
 import contributionMd from "bundle-text:./contribution-extractor/SKILL.md"
@@ -10,11 +11,20 @@ import compareMd from "bundle-text:./compare/SKILL.md"
 import relatedMd from "bundle-text:./related-work/SKILL.md"
 import noteMd from "bundle-text:./add-note/SKILL.md"
 
-
 interface SkillFrontmatter {
   trigger: string
   label: string
   description: string
+  detailedDescription?: string
+  examples?: string[]
+  inputExpectations?: string
+  outputFormat?: string
+  suggestedReadingGoal?: ReadingGoal
+  tags?: string[]
+  category?: string
+  toolsUsed?: string[]
+  permissions?: SkillPermission[]
+  requiresHostPermission?: boolean
 }
 
 function parseFrontmatter(raw: string): { meta: SkillFrontmatter; prompt: string } {
@@ -31,23 +41,37 @@ function parseFrontmatter(raw: string): { meta: SkillFrontmatter; prompt: string
   const fmBlock = trimmed.slice(3, endIdx).trim()
   const prompt = trimmed.slice(endIdx + 3).trim()
 
-  const meta: Record<string, string> = {}
-  for (const line of fmBlock.split("\n")) {
-    const colonIdx = line.indexOf(":")
-    if (colonIdx === -1) continue
-    const key = line.slice(0, colonIdx).trim()
-    const value = line.slice(colonIdx + 1).trim()
-    if (key && value) meta[key] = value
+  const parsed = yaml.load(fmBlock) as Record<string, unknown> | null | undefined
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("SKILL.md frontmatter is not a valid YAML object")
   }
 
-  if (!meta.trigger || !meta.label || !meta.description) {
+  if (!parsed.trigger || !parsed.label || !parsed.description) {
     throw new Error(`SKILL.md missing required frontmatter fields (trigger, label, description)`)
   }
 
-  return {
-    meta: { trigger: meta.trigger, label: meta.label, description: meta.description },
-    prompt
+  const meta: SkillFrontmatter = {
+    trigger: String(parsed.trigger),
+    label: String(parsed.label),
+    description: String(parsed.description)
   }
+
+  if (parsed.detailedDescription) meta.detailedDescription = String(parsed.detailedDescription)
+  if (parsed.inputExpectations) meta.inputExpectations = String(parsed.inputExpectations)
+  if (parsed.outputFormat) meta.outputFormat = String(parsed.outputFormat)
+  if (parsed.category) meta.category = String(parsed.category)
+  if (parsed.suggestedReadingGoal) meta.suggestedReadingGoal = String(parsed.suggestedReadingGoal) as ReadingGoal
+  if (Array.isArray(parsed.examples)) meta.examples = parsed.examples.map(String)
+  if (Array.isArray(parsed.tags)) meta.tags = parsed.tags.map(String)
+  if (Array.isArray(parsed.toolsUsed)) meta.toolsUsed = parsed.toolsUsed.map(String)
+  if (Array.isArray(parsed.permissions)) {
+    meta.permissions = parsed.permissions.map((p) => String(p) as SkillPermission)
+  }
+  if (parsed.requiresHostPermission !== undefined) {
+    meta.requiresHostPermission = Boolean(parsed.requiresHostPermission)
+  }
+
+  return { meta, prompt }
 }
 
 function loadSkill(raw: string): Skill {
@@ -63,5 +87,5 @@ export const SKILLS: Skill[] = [
   loadSkill(summaryMd),
   loadSkill(compareMd),
   loadSkill(relatedMd),
-  loadSkill(noteMd),
+  loadSkill(noteMd)
 ]

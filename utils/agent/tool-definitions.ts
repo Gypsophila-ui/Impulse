@@ -13,6 +13,10 @@ export interface ToolDef {
   usageHint: string
   /** Optional example call */
   example?: string
+  /** Chrome API permissions required to run this tool */
+  requiredPermissions?: string[]
+  /** Whether the tool needs host permission for the current origin */
+  requiresHostPermission?: boolean
 }
 
 // ─── All Tool Definitions ───────────────────────────────────────────────────
@@ -112,7 +116,9 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
     required: [],
     category: "高亮管理",
     usageHint: "用户说“高亮这段的关键词”、“标记重点”、“把这句标为重要”、“分别标记方法和定义”",
-    example: 'apply_highlight(items: [{phrase: "自注意力机制", category: "method"}, {phrase: "核心创新", category: "important"}])'
+    example: 'apply_highlight(items: [{phrase: "自注意力机制", category: "method"}, {phrase: "核心创新", category: "important"}])',
+    requiredPermissions: ["scripting"],
+    requiresHostPermission: true
   },
   {
     name: "get_highlights",
@@ -263,6 +269,34 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
     required: ["title", "comparison_json"],
     category: "论文对比工具",
     usageHint: "用户说“保存这次对比”，或对比完成后主动询问用户是否保存"
+  },
+  {
+    name: "list_skills",
+    description:
+      "列出所有可用的 Agent 技能及其元数据（触发词、标签、示例、所需权限、会调用的工具）。当用户需求不明确、需要向用户推荐技能，或需要查看完整技能目录时使用。",
+    parameters: {},
+    required: [],
+    category: "技能管理",
+    usageHint: "用户问“你能做什么”、“推荐一个技能”、“有哪些技能”"
+  },
+  {
+    name: "invoke_skill",
+    description:
+      "根据 trigger 调用指定的 Agent 技能，返回该技能的完整提示词、所需工具和权限要求。调用后请严格按返回的提示词执行后续操作。如果用户需求明显匹配某个技能，优先调用此工具而不是直接拼接 prompt。",
+    parameters: {
+      trigger: {
+        type: "string",
+        description: "技能的触发词，例如 summary、compare、method"
+      },
+      user_hint: {
+        type: "string",
+        description: "用户的额外意图或补充说明，可选"
+      }
+    },
+    required: ["trigger"],
+    category: "技能管理",
+    usageHint: "用户意图明确对应某个技能时，例如“帮我总结这篇论文”对应 summary，“对比两篇论文”对应 compare",
+    example: 'invoke_skill(trigger: "summary", user_hint: "重点看方法")'
   }
 ]
 

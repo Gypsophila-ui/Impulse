@@ -1,8 +1,25 @@
 ---
-name: summary
 trigger: summary
 label: 全文摘要
 description: 生成论文的简洁摘要（200字以内）
+detailedDescription: 将论文内容压缩为 200 字以内的精炼摘要，提取背景、方法、结果、意义，并自动标注关键高亮。
+examples:
+  - "帮我总结这篇论文"
+  - "给出这篇论文的摘要"
+  - "200字以内概括"
+inputExpectations: 论文全文或选中的长文本
+outputFormat: 200 字以内中文摘要 + 关键短语高亮列表
+category: 摘要提取
+tags:
+  - 摘要
+  - 高亮
+suggestedReadingGoal: understand_method
+toolsUsed:
+  - summarize_selection
+  - apply_highlight
+permissions:
+  - scripting
+requiresHostPermission: true
 ---
 
 # 全文摘要

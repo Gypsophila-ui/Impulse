@@ -6,10 +6,11 @@ import remarkMath from "remark-math"
 import ReactMarkdown from "react-markdown"
 import "katex/dist/katex.min.css"
 
-import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal } from "~types"
+import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal, ShowSkillPermissionNoticeCallback } from "~types"
 import { type ToolExecutionContext } from "~utils/agent/agent-tools"
 import { borderRadius, shadows, transitions } from "~utils/ui/design-tokens"
-import { searchSkills, SKILLS, type Skill } from "~utils/skills"
+import { findSkillByTrigger, searchSkills, SKILLS, type Skill } from "~utils/skills"
+import { getSkillPermissionRequirement, hasPermissions, describePermissionRequirement } from "~utils/permissions"
 import { agentChat } from "~utils/agent/llm-client"
 import { extractPdfText, isPdfUrl, processPdfBuffer } from "~utils/reading/pdf-extractor"
 import { deleteChatSession, saveChatSession } from "~utils/storage/storage"
@@ -514,6 +515,7 @@ interface AgentViewProps {
   onSetChatSummary: (summary: string | undefined) => void
   onSetReadingGoal: (goal: ReadingGoal) => void
   onAskUserQuestion: (params: AskUserQuestionParams) => Promise<AskUserQuestionResult>
+  onShowPermissionNotice?: ShowSkillPermissionNoticeCallback
   onScrollChange?: (scrolled: boolean) => void
 }
 
@@ -543,6 +545,7 @@ const AgentView: React.FC<AgentViewProps> = ({
   onSetChatSummary,
   onSetReadingGoal,
   onAskUserQuestion,
+  onShowPermissionNotice,
   onScrollChange
 }) => {
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -694,6 +697,26 @@ const AgentView: React.FC<AgentViewProps> = ({
   const handleSendChat = async (overrideInput?: string) => {
     const rawInput = (overrideInput ?? chatInput).trim()
     if (!rawInput || chatLoading) return
+
+    // Permission preflight for explicit /skill slash commands
+    const slashTrigger = rawInput.startsWith("/")
+      ? rawInput.split(/\s+/)[0].slice(1).toLowerCase()
+      : ""
+    const slashSkill = slashTrigger ? findSkillByTrigger(slashTrigger) : undefined
+    if (slashSkill && onShowPermissionNotice) {
+      const req = getSkillPermissionRequirement(slashSkill, currentUrl)
+      const allowed = await hasPermissions(req)
+      if (!allowed) {
+        await onShowPermissionNotice({
+          skillName: slashSkill.label,
+          permissions: req.permissions,
+          origins: req.origins,
+          message: `使用 /${slashSkill.trigger} 需要以下权限：${describePermissionRequirement(req)}。请在扩展设置中开启后重试。`
+        })
+        return
+      }
+    }
+
     const input = resolveSkillInput(rawInput)
 
     if (!hasKey) {
@@ -729,6 +752,7 @@ const AgentView: React.FC<AgentViewProps> = ({
         currentTitle,
         currentTabId,
         askUserQuestion: onAskUserQuestion,
+        showPermissionNotice: onShowPermissionNotice,
         readingSummary,
         currentUrlStats
       }
@@ -979,7 +1003,7 @@ const AgentView: React.FC<AgentViewProps> = ({
           <div className="agent-skill-menu">
             <div className="agent-skill-menu-header">
               <Slash size={10} />
-              <span>技能命令 · ↑↓ 导航 · Enter 选择 · Esc 关闭</span>
+              <span>技能命令 · ↑↓ 导航 · Enter 选择 · Esc 关闭 · Agent 也可主动调用</span>
             </div>
             {skillResults.map((skill, i) => (
               <div
@@ -988,9 +1012,37 @@ const AgentView: React.FC<AgentViewProps> = ({
                 onMouseDown={(e) => { e.preventDefault(); applySkill(skill) }}
                 onMouseEnter={() => setSkillIndex(i)}
               >
-                <span className="agent-skill-trigger">/{skill.trigger}</span>
-                <span className="agent-skill-label">{skill.label}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="agent-skill-trigger">/{skill.trigger}</span>
+                  <span className="agent-skill-label">{skill.label}</span>
+                  {skill.tags?.map((tag) => (
+                    <span
+                      key={tag}
+                      style={{
+                        fontSize: 10,
+                        padding: "1px 5px",
+                        borderRadius: 4,
+                        background: "rgba(239, 208, 131, 0.25)",
+                        color: "#8b6914"
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
                 <span className="agent-skill-desc">{skill.description}</span>
+                {skill.examples && skill.examples.length > 0 && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#6b7280",
+                      marginTop: 2,
+                      display: "block"
+                    }}
+                  >
+                    示例：{skill.examples[0]}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -1001,7 +1053,7 @@ const AgentView: React.FC<AgentViewProps> = ({
           value={chatInput}
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={handleInputKeyDown}
-          placeholder="让 Agent 帮你完成任务..."
+          placeholder="让 Agent 帮你完成任务，输入 / 查看技能..."
         />
         <button
           className={`agent-send-btn ${chatInput.trim() && !chatLoading ? "active" : "disabled"}`}

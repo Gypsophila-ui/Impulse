@@ -1,8 +1,29 @@
 ---
-name: compare
 trigger: compare
 label: 对比论文
 description: 列出可对比的论文并生成结构化对比
+detailedDescription: 列出历史阅读过的候选论文，确认对比范围后生成多维度结构化对比表格，并可保存结果。
+examples:
+  - "对比这两篇论文"
+  - "帮我比较几篇论文的方法"
+  - "哪篇论文更好"
+inputExpectations: 用户已阅读过至少两篇论文，或明确指定要对比的论文 URL
+outputFormat: 候选论文列表 → 用户确认 → 结构化对比表格 → 保存确认
+category: 论文对比
+tags:
+  - 对比
+  - 论文
+suggestedReadingGoal: evaluate_novelty
+toolsUsed:
+  - list_candidate_papers
+  - get_reading_history
+  - ask_user_question
+  - get_paper_summary
+  - compare_papers
+  - save_comparison
+permissions:
+  - storage
+requiresHostPermission: false
 ---
 
 # 对比论文

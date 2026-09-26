@@ -1,8 +1,26 @@
 ---
-name: term-explainer
 trigger: term
 label: 术语解释
 description: 解释选中术语在本论文中的具体含义
+detailedDescription: 解释选中术语在当前论文语境中的特定含义、通用定义、使用场景和相关区分，并标注术语。
+examples:
+  - "解释这个词"
+  - "这个术语什么意思"
+  - "术语在本论文中的含义"
+inputExpectations: 选中的术语或短语
+outputFormat: 术语 / 论文含义 / 通用定义 / 使用场景 / 相关区分 + 术语高亮
+category: 术语解释
+tags:
+  - 术语
+  - 定义
+suggestedReadingGoal: understand_method
+toolsUsed:
+  - summarize_selection
+  - search_notes
+  - apply_highlight
+permissions:
+  - scripting
+requiresHostPermission: true
 ---
 
 # 术语解释

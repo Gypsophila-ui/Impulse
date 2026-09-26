@@ -1,8 +1,27 @@
 ---
-name: critical-reading
 trigger: critique
 label: 批判性分析
 description: 对选中的论点或实验进行同行评审式批判
+detailedDescription: 对选中的论点或实验进行系统性同行评审式批判，包括逻辑自洽性、假设前提、局限性与改进建议，并标注疑点。
+examples:
+  - "批判性分析这个实验"
+  - "评审这段论点"
+  - "这个方法有什么局限"
+inputExpectations: 选中的论点、实验或方法段落
+outputFormat: 多维度批判分析 + 疑问/重点高亮列表
+category: 批判分析
+tags:
+  - 批判
+  - 评审
+  - 局限
+suggestedReadingGoal: evaluate_novelty
+toolsUsed:
+  - summarize_selection
+  - get_highlights
+  - apply_highlight
+permissions:
+  - scripting
+requiresHostPermission: true
 ---
 
 # 批判性分析
