@@ -1,4 +1,5 @@
 import { summarize, translate, extractMetadata } from "~utils/agent/llm-client"
+import { resolveToolSourceText } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
 import type { ToolHandler } from "../registry"
 
@@ -7,7 +8,7 @@ async function handleSummarizeSelection(
   context: ToolExecutionContext,
   _onStatus?: ToolExecutionCallback
 ): Promise<ToolResult> {
-  const effectiveText = context.selectedText?.trim() || context.paperText?.trim() || ""
+  const effectiveText = resolveToolSourceText(context)
   if (!effectiveText) {
     return { success: false, error: "没有可用文本", message: "摘要失败：请先选中文本或加载论文全文" }
   }
@@ -24,7 +25,7 @@ async function handleTranslateSelection(
   context: ToolExecutionContext,
   _onStatus?: ToolExecutionCallback
 ): Promise<ToolResult> {
-  const effectiveText = context.selectedText?.trim() || context.paperText?.trim() || ""
+  const effectiveText = resolveToolSourceText(context)
   if (!effectiveText) {
     return { success: false, error: "没有可用文本", message: "翻译失败：请先选中文本或加载论文全文" }
   }
@@ -42,7 +43,7 @@ async function handleExtractPaperMetadata(
   context: ToolExecutionContext,
   _onStatus?: ToolExecutionCallback
 ): Promise<ToolResult> {
-  const effectiveText = context.selectedText?.trim() || context.paperText?.trim() || ""
+  const effectiveText = resolveToolSourceText(context)
   if (!effectiveText) {
     return { success: false, error: "没有可用文本", message: "提取失败：请先选中文本或加载论文全文" }
   }

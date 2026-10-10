@@ -5,6 +5,8 @@ import { AlertTriangle, Bot, FileText, Sparkles } from "lucide-react"
 import type { ChatMessage, ReadingGoal } from "~types"
 import { t } from "~utils/ui/i18n"
 import { chatWithContext } from "~utils/agent/llm-client"
+import { buildPromptContext, formatRetrievedContext } from "~utils/reading/paper-context"
+import { loadPaperDocForRetrieval } from "~utils/storage/storage"
 import { recordComponentEvent } from "~utils/bug-report"
 import { trackEvent } from "~utils/reading/reading-tracker"
 import { deleteChatSession, saveChatSession } from "~utils/storage/storage"
@@ -77,7 +79,18 @@ const QATab: React.FC<QATabProps> = ({
     recordComponentEvent("QATab", "chat_send", `msgs=${newMessages.length}`)
 
     try {
-      const context = chatContext || selectedText
+      // Per-question retrieval: only budgeted, page-marked fragments enter the
+      // prompt — the full extracted text is never injected wholesale.
+      const query = chatInput.trim()
+      const loaded = await loadPaperDocForRetrieval(currentUrl)
+      const retrieved = buildPromptContext(query, {
+        paperDocument: loaded?.doc ?? null,
+        fullChunks: loaded?.fullChunks ?? null,
+        fullTextFallback: chatContext || "",
+        selectedText,
+        title: currentTitle
+      })
+      const context = formatRetrievedContext(retrieved)
       const reply = await chatWithContext(newMessages, context, readingGoal)
       const updatedMessages: ChatMessage[] = [...newMessages, { role: "assistant", content: reply }]
       onSetChatMessages(updatedMessages)

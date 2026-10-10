@@ -6,6 +6,7 @@ import { readingHistoryHandlers } from "./handlers/reading-history"
 import { userInteractionHandlers } from "./handlers/user-interaction"
 import { comparisonHandlers } from "./handlers/comparison"
 import { skillHandlers } from "./handlers/skills"
+import { paperSearchHandlers } from "./handlers/paper-search"
 
 // Register all tool handlers
 const allHandlers = [
@@ -15,7 +16,8 @@ const allHandlers = [
   ...readingHistoryHandlers,
   ...userInteractionHandlers,
   ...comparisonHandlers,
-  ...skillHandlers
+  ...skillHandlers,
+  ...paperSearchHandlers
 ]
 
 for (const handler of allHandlers) {

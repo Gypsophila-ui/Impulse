@@ -3,7 +3,7 @@ import {
   saveHighlights,
   saveHighlightsWithCategories
 } from "~utils/storage/storage"
-import { applyHighlightsToPage } from "../../agent-tools"
+import { applyHighlightsToPage, resolveToolSourceText } from "../../agent-tools"
 import { trackEvent } from "~utils/reading/reading-tracker"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
 import type { ToolHandler } from "../registry"
@@ -79,7 +79,7 @@ async function handleApplyHighlight(
   if (!context.currentTabId) {
     return { success: false, error: "无法获取当前标签页", message: "高亮失败：无法访问页面" }
   }
-  const effectiveText = context.selectedText?.trim() || context.paperText?.trim() || ""
+  const effectiveText = resolveToolSourceText(context)
 
   try {
     const phrasesInSelection = effectiveText

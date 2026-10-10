@@ -55,6 +55,8 @@ export interface AgentChatResult {
   }>
   fallbackToSimpleChat: boolean
   newSummary?: string
+  /** Token usage / truncation report for the assembled prompt (context budgeting) */
+  budgetReport?: { used: Record<string, number>; truncated: string[] }
 }
 
 export interface AgentStatusCallback {
@@ -94,6 +96,24 @@ export interface ChatSession {
   retrievedContext?: RetrievedContext
   timestamp: number
   summary?: string
+  /** Per-turn context provenance snapshots (page-index citation trace) */
+  turns?: AgentTurnSnapshot[]
+}
+
+/**
+ * Lightweight per-turn provenance record: which chunks (and page ranges)
+ * were actually retrieved for a turn, so page-index citations in the reply
+ * can be verified.
+ */
+export interface AgentTurnSnapshot {
+  turnId: string
+  query: string
+  chunkIds: string[]
+  pageRanges: Array<{ start: number; end: number }>
+  /** Chunk indexes actually injected into the prompt */
+  chunkIndexes: number[]
+  tokenBudget?: { used: Record<string, number>; truncated: string[] }
+  timestamp: number
 }
 
 // Paper metadata
@@ -327,6 +347,8 @@ export interface ComparisonRow {
   values: Record<string, string>
   /** one-sentence contrast across papers */
   difference: string
+  /** paperUrl → page-indexed evidence backing this row's cells (RAG mode) */
+  evidence?: Record<string, Evidence[]>
 }
 
 export interface ComparisonResult {
@@ -336,6 +358,10 @@ export interface ComparisonResult {
   summary: string
   recommendation?: string
   generatedAt: number
+  /** How the comparison was produced: retrieved evidence or snapshot fallback */
+  mode?: "rag_evidence" | "snapshot_fallback"
+  /** Retrieval provenance: which chunks were used per paper */
+  trace?: { query: string; perPaperChunkIds: Record<string, string[]> }
 }
 
 export interface SavedComparison {

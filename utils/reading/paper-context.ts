@@ -16,6 +16,11 @@ import type {
   PaperSectionSummary,
   RetrievedContext
 } from "~types"
+import { estimateTokens } from "~utils/agent/token-budget"
+
+// Canonical estimateTokens now lives in utils/agent/token-budget.ts;
+// re-exported here for backward compatibility with existing importers.
+export { estimateTokens }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -57,6 +62,98 @@ export interface RetrievalOptions {
   neighborCount?: number
   /** Boost score for terms appearing in the selected text */
   selectedTextBoost?: number
+  /** Custom scorer (e.g. future embedding-based scorer). Defaults to keyword+TF-IDF. */
+  scorer?: ChunkScorer
+  /** Merge adjacent top chunks into contiguous spans (default true) */
+  mergeAdjacent?: boolean
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chunk scoring (pluggable; embedding-based scorer can be injected later)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Per-query scoring context shared by all chunks. */
+export interface ScoringContext {
+  terms: string[]
+  hints: string[]
+  selectedTerms: string[]
+  /** term → number of chunks containing it (for IDF weighting) */
+  docFreq: Map<string, number>
+  totalChunks: number
+  selectedTextBoost: number
+}
+
+/**
+ * Pluggable chunk scorer. The default implementation uses keyword matching
+ * with IDF weighting; a future embedding-based scorer only needs to replace
+ * this interface implementation, leaving the retrieval pipeline untouched.
+ */
+export interface ChunkScorer {
+  score(chunk: PaperChunk, ctx: ScoringContext): { score: number; matchReason?: string }
+}
+
+/**
+ * Default keyword + TF-IDF scorer.
+ * - IDF: rare terms across the document weigh more
+ * - TF: occurrence count in the chunk text
+ * - Section path matches and section hints give strong boosts
+ */
+export function createKeywordScorer(): ChunkScorer {
+  return {
+    score(chunk, ctx) {
+      let score = 0
+      let matchReason: string | undefined
+      const chunkText = (chunk.normalizedText || chunk.text || "").toLowerCase()
+      const sectionPathLower = chunk.sectionPath.join(" ").toLowerCase()
+
+      const idf = (term: string): number => {
+        const df = ctx.docFreq.get(term) || 0
+        return Math.log(1 + ctx.totalChunks / (1 + df))
+      }
+
+      const countOccurrences = (haystack: string, needle: string): number => {
+        if (!needle) return 0
+        let count = 0
+        let pos = haystack.indexOf(needle)
+        while (pos !== -1) {
+          count++
+          pos = haystack.indexOf(needle, pos + needle.length)
+        }
+        return count
+      }
+
+      for (const term of ctx.terms) {
+        if (chunk.keywords.includes(term)) {
+          score += 2 * idf(term)
+          matchReason = matchReason || `关键词命中: ${term}`
+        }
+        const tf = countOccurrences(chunkText, term)
+        if (tf > 0) {
+          score += Math.min(1 + Math.log2(tf), 3) * idf(term)
+        }
+        if (sectionPathLower.includes(term)) {
+          score += 3 * idf(term)
+          matchReason = matchReason || `章节命中: ${term}`
+        }
+      }
+
+      for (const hint of ctx.hints) {
+        if (sectionPathLower.includes(hint)) {
+          score += 3
+          matchReason = matchReason || `章节匹配: ${hint}`
+        }
+      }
+
+      for (const term of ctx.selectedTerms) {
+        if (chunkText.includes(term)) score += ctx.selectedTextBoost
+      }
+
+      // Position decay: earlier chunks get slight boost
+      score *= 1 - chunk.index / (ctx.totalChunks * 10 + 1)
+
+      return { score: Math.round(score * 100) / 100, matchReason }
+    }
+  }
 }
 
 export interface ContextBudgetConfig {
@@ -114,22 +211,8 @@ const CHINESE_CHAR = /[一-龥぀-ゟ゠-ヿ]/
 // Token estimation
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Conservative token estimate.
- * CJK characters ≈ 1 token per 2.5 chars; others ≈ 1 token per 4 chars.
- */
-export function estimateTokens(text: string): number {
-  let tokens = 0
-  for (const char of text) {
-    if (/\s/.test(char)) continue
-    if (CHINESE_CHAR.test(char)) {
-      tokens += 0.4 // 1 / 2.5
-    } else {
-      tokens += 0.25 // 1 / 4
-    }
-  }
-  return Math.ceil(tokens)
-}
+// estimateTokens is imported from ~utils/agent/token-budget (single source of
+// truth shared with agentChat prompt budgeting). See re-export above.
 
 /**
  * Estimate Chinese-weighted char count for sorting/budgeting.
@@ -637,7 +720,73 @@ function sectionHints(query: string): string[] {
   if (/related work|background|相关工作|背景/.test(lower)) hints.push("related work", "background", "相关工作")
   if (/conclusion|summary|结论|摘要/.test(lower)) hints.push("conclusion", "summary", "结论", "摘要")
   if (/introduction|motivation|引言/.test(lower)) hints.push("introduction", "摘要", "引言")
+
+  // Question-type expansion: map interrogative intent to sections & markers
+  // 对比 → related work / discussion；因果 → discussion / results；数据 → results /
+  // tables；结论 → conclusion / abstract
+  if (/compare|contrast|versus|vs\.?|差异|对比|区别/.test(lower)) {
+    hints.push("related work", "discussion", "对比", "比较", "discussion")
+  }
+  if (/why|cause|reason|because|为什么|原因|因果|由于/.test(lower)) {
+    hints.push("discussion", "analysis", "分析", "讨论", "动机")
+  }
+  if (/how many|how much|number|percentage|accuracy|数据|多少|准确率|性能|指标/.test(lower)) {
+    hints.push("results", "experiments", "evaluation", "table", "结果", "实验")
+  }
+  if (/limitation|drawback|weakness|局限|缺点|不足/.test(lower)) {
+    hints.push("discussion", "conclusion", "limitation", "局限", "讨论")
+  }
   return hints
+}
+
+/**
+ * Merge runs of consecutive (index-adjacent) chunks into single spans so the
+ * prompt carries fewer, more complete fragments with wider page ranges.
+ */
+function mergeAdjacentChunks(
+  chunks: Array<PaperChunk & { score: number; matchReason?: string }>
+): Array<PaperChunk & { score: number; matchReason?: string }> {
+  if (chunks.length <= 1) return chunks
+
+  const sorted = [...chunks].sort((a, b) => a.index - b.index)
+  const merged: Array<PaperChunk & { score: number; matchReason?: string }> = []
+  let run: Array<PaperChunk & { score: number; matchReason?: string }> = [sorted[0]]
+
+  const flushRun = () => {
+    if (run.length === 1) {
+      merged.push(run[0])
+    } else {
+      const head = run[0]
+      const best = [...run].sort((a, b) => b.score - a.score)[0]
+      merged.push({
+        ...best,
+        index: head.index,
+        id: head.id,
+        startPage: Math.min(...run.map((c) => c.startPage)),
+        endPage: Math.max(...run.map((c) => c.endPage)),
+        text: run.map((c) => c.text || "").join("\n\n"),
+        charRange: {
+          start: head.charRange.start,
+          end: run[run.length - 1].charRange.end
+        },
+        matchReason: best.matchReason
+      })
+    }
+    run = []
+  }
+
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].index === run[run.length - 1].index + 1) {
+      run.push(sorted[i])
+    } else {
+      flushRun()
+      run = [sorted[i]]
+    }
+  }
+  flushRun()
+
+  // Keep descending-score presentation order
+  return merged.sort((a, b) => b.score - a.score)
 }
 
 export function retrieveContext(
@@ -651,44 +800,38 @@ export function retrieveContext(
     topK = 5,
     maxContextTokens = 3500,
     neighborCount = 1,
-    selectedTextBoost = 2
+    selectedTextBoost = 2,
+    scorer = createKeywordScorer(),
+    mergeAdjacent = true
   } = options
 
   const terms = tokenizeQuery(query)
   const hints = sectionHints(query)
   const selectedTerms = tokenizeQuery(selectedText)
 
-  const chunkScores = doc.chunks.map((chunk) => {
-    let score = 0
-    let matchReason = ""
-
+  // Build document frequency map for IDF weighting (term → chunk count)
+  const docFreq = new Map<string, number>()
+  for (const chunk of doc.chunks) {
     const chunkText = (chunk.normalizedText || chunk.text || "").toLowerCase()
-    const sectionPathLower = chunk.sectionPath.join(" ").toLowerCase()
-
-    // Term matches
     for (const term of terms) {
-      if (chunk.keywords.includes(term)) score += 2
-      if (chunkText.includes(term)) score += 1
-      if (sectionPathLower.includes(term)) score += 3
-    }
-
-    // Section hints
-    for (const hint of hints) {
-      if (sectionPathLower.includes(hint)) {
-        score += 3
-        matchReason = `章节匹配: ${hint}`
+      if (chunkText.includes(term)) {
+        docFreq.set(term, (docFreq.get(term) || 0) + 1)
       }
     }
+  }
 
-    // Selected text boost
-    for (const term of selectedTerms) {
-      if (chunkText.includes(term)) score += selectedTextBoost
-    }
+  const scoringCtx: ScoringContext = {
+    terms,
+    hints,
+    selectedTerms,
+    docFreq,
+    totalChunks: doc.chunks.length,
+    selectedTextBoost
+  }
 
-    // Position decay: earlier chunks get slight boost
-    score *= 1 - chunk.index / (doc.chunks.length * 10 + 1)
-
-    return { chunk, score: Math.round(score * 100) / 100, matchReason }
+  const chunkScores = doc.chunks.map((chunk) => {
+    const { score, matchReason } = scorer.score(chunk, scoringCtx)
+    return { chunk, score, matchReason }
   })
 
   // Sort by score descending
@@ -713,6 +856,10 @@ export function retrieveContext(
       score: cs.score,
       matchReason: cs.matchReason
     }))
+
+  // Merge adjacent top chunks into contiguous spans: reduces fragmentation
+  // and yields more complete page ranges in citations.
+  const mergedTopChunks = mergeAdjacent ? mergeAdjacentChunks(topChunks) : topChunks
 
   // Gather neighbor chunks
   const neighborIndexes = new Set<number>()
@@ -766,7 +913,7 @@ export function retrieveContext(
 
   // Add top chunks within budget
   const selectedTopChunks: Array<PaperChunk & { score: number; matchReason?: string }> = []
-  for (const chunk of topChunks) {
+  for (const chunk of mergedTopChunks) {
     const t = chunk.estimatedTokens || estimateTokens(chunk.text || "")
     if (usedTokens + t > maxContextTokens) break
     selectedTopChunks.push(chunk)
@@ -782,7 +929,7 @@ export function retrieveContext(
     usedTokens += t
   }
 
-  const contextTruncated = topChunks.length > selectedTopChunks.length || neighborChunks.length > selectedNeighbors.length
+  const contextTruncated = mergedTopChunks.length > selectedTopChunks.length || neighborChunks.length > selectedNeighbors.length
 
   return {
     fullSummary,
@@ -918,5 +1065,136 @@ export function toPaperContextRecord(doc: PaperDocument): PaperContextRecord {
   return {
     ...rest,
     chunks: chunks.map(({ text, normalizedText, ...meta }) => meta)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unified prompt-context facade
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PromptContextOptions {
+  /** Indexed document (preferred path). */
+  paperDocument?: PaperDocument | null
+  /** Full chunk texts for paperDocument.docHash. */
+  fullChunks?: Map<number, string> | null
+  /** Fallback full text when no index exists (legacy chatContext). */
+  fullTextFallback?: string
+  /** Selected text on the page (boosts matching, included as-is). */
+  selectedText?: string
+  /** Document title for on-the-fly chunk page attribution. */
+  title?: string
+  retrieval?: RetrievalOptions
+}
+
+/**
+ * Unified context facade: every prompt context passes through the same
+ * retrieval + token budget + page-marker formatting, regardless of whether
+ * the paper was pre-indexed.
+ *
+ * - Indexed paper  → existing retrieveContext() (parse-time chunking)
+ * - Unindexed text → lightweight on-the-fly chunking + the same retrieval
+ * - Nothing        → selectedText only
+ */
+export function buildPromptContext(
+  query: string,
+  options: PromptContextOptions = {}
+): RetrievedContext {
+  const { paperDocument, fullChunks, fullTextFallback, selectedText = "" } = options
+
+  if (paperDocument && paperDocument.chunks.length > 0) {
+    return retrieveContext(
+      paperDocument,
+      fullChunks || new Map(),
+      query,
+      selectedText,
+      options.retrieval
+    )
+  }
+
+  if (fullTextFallback && fullTextFallback.trim().length > 0) {
+    const doc = chunkPlainTextOnTheFly(fullTextFallback, options.title || "")
+    return retrieveContext(doc, new Map(doc.chunks.map((c) => [c.index, c.text || ""])), query, selectedText, {
+      ...options.retrieval,
+      neighborCount: 0
+    })
+  }
+
+  // Nothing available — degrade to selected text only
+  return buildLegacyRetrievedContext(selectedText || "")
+}
+
+const FLY_CHUNK_TARGET_TOKENS = 800
+
+/**
+ * Lightweight paragraph-aggregation chunking for unindexed full text.
+ * Produces a pseudo PaperDocument so the same retrieval/budget/marker
+ * pipeline can run over it. Page numbers are unknown (1) — the marker
+ * format stays consistent so citations remain parseable.
+ */
+export function chunkPlainTextOnTheFly(fullText: string, title: string): PaperDocument {
+  const docHash = `fly_${simpleHash(fullText.slice(0, 2000) + fullText.length)}`
+  const paragraphs = fullText.split(/\n\n+/)
+
+  const chunks: PaperChunk[] = []
+  let current: string[] = []
+  let currentTokens = 0
+  let charStart = 0
+  let charEnd = 0
+
+  const flush = () => {
+    if (current.length === 0) return
+    const text = current.join("\n\n")
+    const normalized = removeHeaderFooterNoise(text)
+    const keywords = extractKeywords(normalized)
+    chunks.push({
+      id: `${docHash}_${chunks.length.toString().padStart(6, "0")}`,
+      index: chunks.length,
+      sectionPath: ["原文"],
+      startPage: 1,
+      endPage: 1,
+      charRange: { start: charStart, end: charEnd },
+      text,
+      normalizedText: normalized,
+      charCount: text.length,
+      estimatedTokens: estimateTokens(text),
+      keywords,
+      termFrequency: buildTermFrequency(keywords)
+    })
+    current = []
+    currentTokens = 0
+  }
+
+  let offset = 0
+  for (const raw of paragraphs) {
+    const text = normalizeWhitespace(raw)
+    if (!text) {
+      offset += raw.length + 2
+      continue
+    }
+    const t = estimateTokens(text)
+    if (currentTokens + t > FLY_CHUNK_TARGET_TOKENS * 1.5 && currentTokens >= FLY_CHUNK_TARGET_TOKENS * 0.5) {
+      flush()
+    }
+    if (current.length === 0) charStart = offset
+    current.push(text)
+    currentTokens += t
+    charEnd = offset + raw.length
+    offset += raw.length + 2
+    if (currentTokens >= FLY_CHUNK_TARGET_TOKENS) flush()
+  }
+  flush()
+
+  return {
+    url: "",
+    title,
+    docHash,
+    pageCount: 1,
+    truncated: false,
+    chunks,
+    sectionSummaries: {},
+    keywords: [],
+    version: 1,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   }
 }

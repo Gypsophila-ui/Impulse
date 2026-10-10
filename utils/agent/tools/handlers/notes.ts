@@ -1,5 +1,6 @@
 import { saveNote, getNotesByUrl } from "~utils/storage/storage"
 import { trackEvent } from "~utils/reading/reading-tracker"
+import { resolveToolSourceText } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
 import type { ToolHandler } from "../registry"
 
@@ -12,7 +13,7 @@ async function handleSaveNote(
   if (!comment?.trim()) {
     return { success: false, error: "笔记内容不能为空", message: "保存失败：笔记内容为空" }
   }
-  const effectiveText = context.selectedText?.trim() || context.paperText?.trim() || ""
+  const effectiveText = resolveToolSourceText(context)
   if (!effectiveText) {
     return { success: false, error: "没有可用文本", message: "保存失败：请先选中要记录的文本或加载论文全文" }
   }

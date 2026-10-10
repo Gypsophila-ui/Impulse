@@ -2,7 +2,7 @@
  * Chrome storage utility for persisting configuration and API keys
  */
 
-import type { ChatMessage, ChatSession, Language, PaperDocument, PaperMetadata, PaperSnapshot, RetrievedContext, SavedComparison, Theme } from "~types"
+import type { AgentTurnSnapshot, ChatMessage, ChatSession, Language, PaperChunk, PaperDocument, PaperMetadata, PaperSnapshot, RetrievedContext, SavedComparison, Theme } from "~types"
 import { getSafeAllDistinctUrls, getSafeReadingStatsForUrl } from "~utils/reading/reading-tracker"
 
 export interface LLMConfig {
@@ -324,6 +324,31 @@ export async function getChatSessionByUrl(url: string): Promise<ChatSession | nu
 export interface SaveChatSessionOptions {
   docHash?: string
   retrievedContext?: RetrievedContext
+  /** Per-turn context provenance snapshot (page-index citation trace) */
+  turn?: AgentTurnSnapshot
+}
+
+/** Keep at most this many turn snapshots per session */
+const MAX_TURNS_PER_SESSION = 20
+/** Soft cap for a single turn snapshot; degraded further on overflow */
+const MAX_TURN_SNAPSHOT_BYTES = 64 * 1024
+
+function normalizeTurnSnapshot(turn: AgentTurnSnapshot): AgentTurnSnapshot {
+  let snapshot = turn
+  // Degrade gracefully when a snapshot is oversized: shrink page ranges first,
+  // then drop the used/truncated budget detail.
+  for (let attempt = 0; attempt < 3 && estimateJsonSize(snapshot) > MAX_TURN_SNAPSHOT_BYTES; attempt++) {
+    if (snapshot.pageRanges.length > 10) {
+      snapshot = { ...snapshot, pageRanges: snapshot.pageRanges.slice(0, 10) }
+    } else if (snapshot.chunkIds.length > 50) {
+      snapshot = { ...snapshot, chunkIds: snapshot.chunkIds.slice(0, 50) }
+    } else if (snapshot.tokenBudget) {
+      snapshot = { ...snapshot, tokenBudget: undefined }
+    } else {
+      break
+    }
+  }
+  return snapshot
 }
 
 export async function saveChatSession(
@@ -347,6 +372,10 @@ export async function saveChatSession(
     sessions[existingIndex].docHash = options.docHash ?? sessions[existingIndex].docHash
     sessions[existingIndex].retrievedContext = options.retrievedContext ?? sessions[existingIndex].retrievedContext
     sessions[existingIndex].timestamp = Date.now()
+    if (options.turn) {
+      const turns = [...(sessions[existingIndex].turns || []), normalizeTurnSnapshot(options.turn)]
+      sessions[existingIndex].turns = turns.slice(-MAX_TURNS_PER_SESSION)
+    }
     if (summary !== undefined) {
       sessions[existingIndex].summary = summary
     }
@@ -363,6 +392,7 @@ export async function saveChatSession(
     docHash: options.docHash,
     retrievedContext: options.retrievedContext,
     timestamp: Date.now(),
+    ...(options.turn ? { turns: [normalizeTurnSnapshot(options.turn)] } : {}),
     ...(summary ? { summary } : {})
   }
   sessions.push(newSession)
@@ -477,6 +507,30 @@ export async function getPaperDocFull(docHash: string): Promise<Map<number, stri
     map.set(chunk.index, chunk.text)
   }
   return map
+}
+
+/**
+ * Load a previously indexed paper (index record + full chunk texts) so it can
+ * be re-retrieved without downloading the PDF again. Returns null when the
+ * paper was never indexed or its full-text record was evicted.
+ */
+export async function loadPaperDocForRetrieval(
+  url: string
+): Promise<{ doc: PaperDocument; fullChunks: Map<number, string> } | null> {
+  const context = await getPaperContextByUrl(url)
+  if (!context || context.chunks.length === 0) return null
+  const fullMap = await getPaperDocFull(context.docHash)
+  if (!fullMap) return null
+
+  const doc: PaperDocument = {
+    ...context,
+    chunks: context.chunks.map((c) => ({
+      ...c,
+      text: fullMap.get(c.index) || "",
+      normalizedText: c.normalizedText || ""
+    }))
+  }
+  return { doc, fullChunks: fullMap }
 }
 
 export async function deletePaperContext(url: string): Promise<void> {

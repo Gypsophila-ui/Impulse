@@ -112,7 +112,11 @@ const translations: Record<Language, Record<string, string>> = {
     "agent.skillCatalogHeader": "Available Skills",
     "agent.permissionNoticeTitle": "Permission Required",
     "agent.permissionNoticeOpenSettings": "Open Extension Settings",
-    "agent.skillRecommended": "Recommended skill"
+    "agent.skillRecommended": "Recommended skill",
+
+    // Agent trace / citation verification
+    "agent.trace.citationsVerified": "✓ Page citations verified against this turn's retrieved context",
+    "agent.trace.citationsUnverified": "⚠ {{count}} citation(s) could not be traced to this turn's retrieved context — please double-check"
   },
 
   zh: {
@@ -226,7 +230,11 @@ const translations: Record<Language, Record<string, string>> = {
     "agent.skillCatalogHeader": "可用技能",
     "agent.permissionNoticeTitle": "权限不足",
     "agent.permissionNoticeOpenSettings": "去扩展设置开启",
-    "agent.skillRecommended": "推荐技能"
+    "agent.skillRecommended": "推荐技能",
+
+    // Agent trace / citation verification
+    "agent.trace.citationsVerified": "✓ 页码引用已通过本轮检索上下文校验",
+    "agent.trace.citationsUnverified": "⚠ {{count}} 处引用未能在本轮检索上下文中溯源，请谨慎核对"
   }
 }
 

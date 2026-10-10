@@ -6,7 +6,8 @@ import remarkMath from "remark-math"
 import ReactMarkdown from "react-markdown"
 import "katex/dist/katex.min.css"
 
-import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, PaperDocument, ReadingGoal, RetrievedContext, ShowSkillPermissionNoticeCallback } from "~types"
+import type { AgentChatResult, AgentTurnSnapshot, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, PaperDocument, ReadingGoal, RetrievedContext, ShowSkillPermissionNoticeCallback } from "~types"
+import { verifyCitations, type CitationVerdict } from "~utils/agent/citations"
 import { type ToolExecutionContext } from "~utils/agent/agent-tools"
 import { borderRadius, shadows, transitions } from "~utils/ui/design-tokens"
 import { findSkillByTrigger, searchSkills, SKILLS, type Skill } from "~utils/skills"
@@ -16,10 +17,10 @@ import { extractPdfPages, isPdfUrl, processPdfBuffer } from "~utils/reading/pdf-
 import {
   buildLegacyRetrievedContext,
   buildPaperDocument,
-  retrieveContext,
+  buildPromptContext,
   type PdfPageText
 } from "~utils/reading/paper-context"
-import { deleteChatSession, deletePaperContext, getPaperContextByUrl, getPaperDocFull, saveChatSession, savePaperContext } from "~utils/storage/storage"
+import { deleteChatSession, deletePaperContext, getPaperContextByUrl, getPaperDocFull, loadPaperDocForRetrieval, saveChatSession, savePaperContext } from "~utils/storage/storage"
 import { trackEvent } from "~utils/reading/reading-tracker"
 
 import Spinner from "./common/Spinner"
@@ -646,6 +647,8 @@ const AgentView: React.FC<AgentViewProps> = ({
   // Structured paper context
   const [paperDocument, setPaperDocument] = useState<PaperDocument | null>(null)
   const [docHash, setDocHash] = useState<string | null>(null)
+  // Citation verification for the latest assistant reply (page-index trace)
+  const [citationVerdict, setCitationVerdict] = useState<CitationVerdict | null>(null)
   const [retrievalStatus, setRetrievalStatus] = useState<{ indexed: boolean; chunkCount: number; truncated: boolean }>({
     indexed: false,
     chunkCount: 0,
@@ -784,18 +787,30 @@ const AgentView: React.FC<AgentViewProps> = ({
     onSetLastToolCalls([])
 
     try {
-      // Build retrieved context for the current query
+      // Build retrieved context for the current query via the unified facade:
+      // indexed paper → parse-time chunks; unindexed → on-the-fly chunking;
+      // nothing → selected text only. Full text is never injected wholesale.
       let retrievedContext: RetrievedContext
-      if (paperDocument) {
-        const fullMap = await getPaperDocFull(paperDocument.docHash)
-        retrievedContext = retrieveContext(
-          paperDocument,
-          fullMap || new Map(),
-          input,
+      const loadedDoc = paperDocument
+        ? {
+            doc: paperDocument,
+            fullChunks: (await getPaperDocFull(paperDocument.docHash)) || new Map<number, string>()
+          }
+        : await loadPaperDocForRetrieval(currentUrl)
+      if (loadedDoc) {
+        retrievedContext = buildPromptContext(input, {
+          paperDocument: loadedDoc.doc,
+          fullChunks: loadedDoc.fullChunks,
           selectedText
-        )
+        })
+      } else if ((chatContext || selectedText).trim()) {
+        retrievedContext = buildPromptContext(input, {
+          fullTextFallback: chatContext || selectedText,
+          selectedText,
+          title: currentTitle
+        })
       } else {
-        retrievedContext = buildLegacyRetrievedContext(chatContext || selectedText)
+        retrievedContext = buildLegacyRetrievedContext(selectedText)
       }
 
       // Fetch reading history for agent context (sync, safe — returns null if DB not ready)
@@ -805,7 +820,9 @@ const AgentView: React.FC<AgentViewProps> = ({
 
       const toolContext: ToolExecutionContext = {
         selectedText,
-        paperText: chatContext || selectedText,
+        // Capped preview only — handlers fall back to retrievedContext for
+        // full-paper content instead of carrying the whole 60K text around.
+        paperText: (chatContext || selectedText).slice(0, 2000),
         currentUrl,
         currentTitle,
         currentTabId,
@@ -837,13 +854,35 @@ const AgentView: React.FC<AgentViewProps> = ({
         if (result.toolCallsExecuted) {
           onSetLastToolCalls(result.toolCallsExecuted)
         }
+
+        // Per-turn context provenance snapshot: which chunks/pages actually
+        // entered the prompt, so page-index citations can be verified later.
+        const turnSnapshot: AgentTurnSnapshot = {
+          turnId: `turn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          query: input,
+          chunkIds: retrievedContext.chunks.map((c) => c.id),
+          chunkIndexes: retrievedContext.chunks.map((c) => c.index),
+          pageRanges: retrievedContext.chunks.map((c) => ({ start: c.startPage, end: c.endPage })),
+          ...(result.budgetReport
+            ? {
+                tokenBudget: {
+                  used: result.budgetReport.used as Record<string, number>,
+                  truncated: result.budgetReport.truncated
+                }
+              }
+            : {}),
+          timestamp: Date.now()
+        }
+        const verdict = verifyCitations(result.message, turnSnapshot)
+        setCitationVerdict(verdict)
+
         await saveChatSession(
           currentUrl,
           currentTitle,
           updatedMessages,
           chatContext || selectedText,
           result.newSummary || chatSummary,
-          { docHash: docHash || undefined, retrievedContext }
+          { docHash: docHash || undefined, retrievedContext, turn: turnSnapshot }
         )
         trackEvent("agent_message", { messages_count: updatedMessages.length, tool_calls: result.toolCallsExecuted?.length || 0, goal: readingGoal })
       } else {
@@ -1052,6 +1091,36 @@ const AgentView: React.FC<AgentViewProps> = ({
               </div>
               <span>{agentStatus || "思考中..."}</span>
             </div>
+          </div>
+        )}
+
+        {citationVerdict && !chatLoading && (
+          <div
+            className="agent-citation-verdict"
+            style={{
+              fontSize: 11,
+              padding: "4px 10px",
+              borderRadius: borderRadius.sm,
+              margin: "4px 16px",
+              alignSelf: "flex-start",
+              background: citationVerdict.hasCitations
+                ? citationVerdict.allVerified
+                  ? "rgba(5, 150, 105, 0.08)"
+                  : "rgba(217, 119, 6, 0.10)"
+                : "transparent",
+              color: citationVerdict.hasCitations
+                ? citationVerdict.allVerified
+                  ? "#059669"
+                  : "#b45309"
+                : "transparent",
+              border: `1px solid ${citationVerdict.hasCitations ? (citationVerdict.allVerified ? "rgba(5, 150, 105, 0.25)" : "rgba(217, 119, 6, 0.3)") : "transparent"}`
+            }}
+          >
+            {citationVerdict.hasCitations
+              ? citationVerdict.allVerified
+                ? "✓ 页码引用已通过本轮检索上下文校验"
+                : `⚠ ${citationVerdict.unverifiedChunks.length + citationVerdict.unverifiedPages.length} 处引用未能在本轮检索上下文中溯源，请谨慎核对`
+              : ""}
           </div>
         )}
 

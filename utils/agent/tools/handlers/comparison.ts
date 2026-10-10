@@ -1,4 +1,4 @@
-import type { ComparisonDimension, ComparisonResult, PaperSnapshot } from "~types"
+import type { ComparisonDimension, ComparisonResult, Evidence, PaperSnapshot } from "~types"
 import {
   getPaperSnapshot,
   listCandidatePapers,
@@ -89,20 +89,23 @@ async function handleComparePapers(
       }
     }
 
-    onStatus?.("正在生成对比分析...", "compare_papers")
+    const { retrievePaperEvidence, formatEvidenceBlock, buildComparisonQuery } = await import(
+      "~utils/agent/comparison-retrieval"
+    )
+    const query = buildComparisonQuery(dimensions, focus)
 
-    const paperSummaries = validSnapshots.map((s, i) => {
-      const noteText = s.notes.map((n) => `- ${n.comment}`).join("\n") || "（无笔记）"
-      const highlightText = s.highlights.length > 0 ? s.highlights.join("、") : "（无高亮）"
-      const ctx = s.contextPreview || "（无上下文）"
-      return `### 论文 ${i + 1}：${s.title}
-URL: ${s.url}
-作者：${s.authors.join(", ") || "未知"}  年份：${s.year || "未知"}
-用户笔记：
-${noteText}
-关键高亮：${highlightText}
-文本预览：${ctx.slice(0, 400)}`
-    }).join("\n\n")
+    onStatus?.("正在检索论文证据（含页码）...", "compare_papers")
+    const evidenceList = await Promise.all(paperUrls.map((u) => retrievePaperEvidence(u, query, 2000)))
+    const retrievable = evidenceList.filter((e) => e.retrievable)
+    const evidenceByPaper: Record<string, Evidence[]> = Object.fromEntries(
+      evidenceList.map((e) => [e.url, e.evidences])
+    )
+    const perPaperChunkIds: Record<string, string[]> = Object.fromEntries(
+      evidenceList.map((e) => [
+        e.url,
+        e.evidences.map((ev) => `chunk_${ev.chunkIndex}`)
+      ])
+    )
 
     const dimensionLabels: Record<string, string> = {
       contribution: "核心贡献",
@@ -115,20 +118,85 @@ ${noteText}
     const dimText = dimensions.map((d) => dimensionLabels[d] || d).join("、")
     const focusText = focus ? `\n特别关注：${focus}` : ""
 
-    const { comparePapersWithLLM } = await import("~utils/agent/llm-client")
-    const result: ComparisonResult = await comparePapersWithLLM(
-      validSnapshots,
-      dimensions,
-      paperSummaries,
-      dimText,
-      focusText
-    )
-    trackEvent("compare", { paper_count: validSnapshots.length, dimensions: dimensions.length })
+    const { comparePapersWithLLM, generatePaperDimensionDigest } = await import("~utils/agent/llm-client")
+
+    let result: ComparisonResult
+    let mode: "rag_evidence" | "snapshot_fallback"
+
+    if (retrievable.length >= 2) {
+      // RAG mode: page-indexed evidence from paper full-text indexes
+      mode = "rag_evidence"
+      if (retrievable.length <= 3) {
+        // Single call: evidence blocks fit comfortably in the prompt
+        onStatus?.("正在生成对比分析（基于原文证据）...", "compare_papers")
+        const paperSummaries = retrievable.map((e) => formatEvidenceBlock(e)).join("\n\n")
+        result = await comparePapersWithLLM(validSnapshots, dimensions, paperSummaries, dimText, focusText, {
+          mode,
+          trace: { query, perPaperChunkIds },
+          evidenceByPaper
+        })
+      } else {
+        // Map-Reduce: per-paper dimension digests, then cross-paper comparison
+        onStatus?.("正在逐篇提取维度要点（Map）...", "compare_papers")
+        const digests = await Promise.all(
+          retrievable.map((e) =>
+            generatePaperDimensionDigest(e.title, e.url, formatEvidenceBlock(e), dimText, focusText).catch(
+              () => `（《${e.title}》要点提取失败）`
+            )
+          )
+        )
+        onStatus?.("正在生成跨论文对比（Reduce）...", "compare_papers")
+        const paperSummaries = retrievable
+          .map((e, i) => `### ${e.title}\nURL: ${e.url}\n维度要点（含页码）：\n${digests[i]}`)
+          .join("\n\n")
+        result = await comparePapersWithLLM(validSnapshots, dimensions, paperSummaries, dimText, focusText, {
+          mode,
+          trace: { query, perPaperChunkIds },
+          evidenceByPaper
+        })
+      }
+    } else {
+      // Snapshot fallback: no indexed papers (or only one) — legacy preview mode
+      mode = "snapshot_fallback"
+      onStatus?.("正在生成对比分析（快照模式）...", "compare_papers")
+      const paperSummaries = validSnapshots
+        .map((s, i) => {
+          const noteText = s.notes.map((n) => `- ${n.comment}`).join("\n") || "（无笔记）"
+          const highlightText = s.highlights.length > 0 ? s.highlights.join("、") : "（无高亮）"
+          const ctx = s.contextPreview || "（无上下文）"
+          return `### 论文 ${i + 1}：${s.title}
+URL: ${s.url}
+作者：${s.authors.join(", ") || "未知"}  年份：${s.year || "未知"}
+用户笔记：
+${noteText}
+关键高亮：${highlightText}
+文本预览：${ctx.slice(0, 400)}`
+        })
+        .join("\n\n")
+
+      result = await comparePapersWithLLM(validSnapshots, dimensions, paperSummaries, dimText, focusText, {
+        mode,
+        trace: { query, perPaperChunkIds }
+      })
+    }
+
+    const evidenceCount = Object.values(evidenceByPaper).reduce((n, list) => n + list.length, 0)
+    trackEvent("compare", {
+      paper_count: validSnapshots.length,
+      dimensions: dimensions.length,
+      mode,
+      evidence_count: evidenceCount
+    })
+
+    const modeHint =
+      mode === "rag_evidence"
+        ? `基于 ${evidenceCount} 个带页码的原文证据片段`
+        : "（部分论文无全文索引，使用摘要快照模式，无页码引用）"
 
     return {
       success: true,
       data: result,
-      message: `已完成 ${validSnapshots.length} 篇论文的对比分析（维度：${dimText}）`
+      message: `已完成 ${validSnapshots.length} 篇论文的对比分析（维度：${dimText}，${modeHint}）`
     }
   } catch (e: any) {
     return { success: false, error: e?.message, message: `对比生成失败：${e?.message ?? String(e)}` }

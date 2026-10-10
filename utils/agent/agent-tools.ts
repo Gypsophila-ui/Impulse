@@ -1,6 +1,7 @@
 import type { AskUserQuestionCallback, RetrievedContext, ShowSkillPermissionNoticeCallback } from "~types"
 import type { HighlightCategory } from "~utils/storage/storage"
 import { getHighlightColor } from "~utils/storage/storage"
+import { truncateWithMarker } from "./token-budget"
 
 // ─── Context & Result types ────────────────────────────────────────────────
 
@@ -505,6 +506,30 @@ export async function clearHighlightsOnPage(tabId: number): Promise<void> {
 
 // ─── Tool execution (delegates to registry) ──────────────────────────────
 
+/**
+ * Resolve the source text for a tool, in priority order:
+ * 1. Selected text (most specific)
+ * 2. Retrieved context (full summary + top chunks — already token-budgeted)
+ * 3. paperText (capped preview; last resort)
+ */
+export function resolveToolSourceText(context: ToolExecutionContext): string {
+  const selected = context.selectedText?.trim()
+  if (selected) return selected
+
+  const rc = context.retrievedContext
+  if (rc) {
+    const parts: string[] = []
+    if (rc.fullSummary) parts.push(rc.fullSummary)
+    for (const chunk of [...rc.chunks, ...rc.neighborChunks]) {
+      if (chunk.text) parts.push(chunk.text)
+    }
+    const joined = parts.join("\n\n").trim()
+    if (joined) return joined
+  }
+
+  return (context.paperText || "").trim()
+}
+
 export async function executeToolCall(
   toolName: string,
   args: Record<string, unknown>,
@@ -563,10 +588,7 @@ export function formatToolResultForLLM(result: ToolResult): string {
 
   text = sanitizeForApi(text)
 
-  // Truncate to prevent oversized request bodies
-  if (text.length > MAX_TOOL_RESULT_LENGTH) {
-    text = text.slice(0, MAX_TOOL_RESULT_LENGTH) + "\n...[结果已截断]"
-  }
-
-  return text
+  // Truncate to prevent oversized request bodies — with a structured marker
+  // so the model knows content was cut rather than silently losing it.
+  return truncateWithMarker(text, MAX_TOOL_RESULT_LENGTH)
 }

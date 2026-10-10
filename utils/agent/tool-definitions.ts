@@ -161,6 +161,43 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
     usageHint: "用户说“提取论文信息”、“这篇论文的作者是谁”"
   },
   {
+    name: "search_paper_content",
+    description:
+      "在论文全文索引中检索与查询最相关的原文片段，返回带章节与页码标记的原文。默认检索当前论文，可通过 url 参数检索其他已读论文。当需要精确引用原文、标注页码出处、查找术语定义/数据/结论位置、或多跳推理需要补充论文其他部分内容时使用。",
+    parameters: {
+      query: {
+        type: "string",
+        description: "检索查询词，使用论文中出现的核心术语（英文优先）效果最佳"
+      },
+      url: {
+        type: "string",
+        description: "可选。要检索的论文 URL，默认为当前论文"
+      },
+      section: {
+        type: "string",
+        description: "可选。按章节名过滤，如 method、experiments、related work"
+      },
+      page_start: {
+        type: "number",
+        description: "可选。起始页码（含）"
+      },
+      page_end: {
+        type: "number",
+        description: "可选。结束页码（含）"
+      },
+      top_k: {
+        type: "number",
+        description: "可选。返回片段数量，默认 5，最大 10"
+      }
+    },
+    required: ["query"],
+    category: "论文检索",
+    usageHint:
+      "需要原文证据、页码引用、定位结论出处，或感觉已有上下文不足以回答时主动检索补充",
+    example:
+      'search_paper_content(query: "attention mechanism complexity") 或 search_paper_content(query: "数据集规模", section: "experiments", page_start: 5, page_end: 8)'
+  },
+  {
     name: "ask_user_question",
     description:
       "向用户提问并获取回答。当需要用户做出选择、确认操作、提供偏好设置或澄清模糊需求时使用。可以提供预设选项供用户选择，也可以允许用户自定义输入。",

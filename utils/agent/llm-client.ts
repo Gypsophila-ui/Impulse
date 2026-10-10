@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
 
-import type { AgentChatResult, AgentStatusCallback, ChatMessage, ComparisonDimension, ComparisonResult, PaperMetadata, PaperSnapshot, ReadingGoal, RetrievedContext } from "~types"
+import type { AgentChatResult, AgentStatusCallback, ChatMessage, ComparisonDimension, ComparisonResult, Evidence, PaperMetadata, PaperSnapshot, ReadingGoal, RetrievedContext } from "~types"
 import {
   executeToolCall,
   formatToolResultForLLM,
@@ -13,6 +13,7 @@ import { PAPER_TOOLS, getToolPrompt } from "./tool-definitions"
 import { getLLMConfig } from "~utils/storage/storage"
 import { getSkillCatalogText } from "~utils/skills"
 import { buildLegacyRetrievedContext, formatRetrievedContext } from "~utils/reading/paper-context"
+import { TOKEN_BUDGET, estimateTokens, truncateWithMarker, createBudgetReport, type TokenBudgetReport } from "./token-budget"
 
 let openaiClient: OpenAI | null = null
 
@@ -186,7 +187,9 @@ Return ONLY a valid JSON object with a "highlights" array field. Example: {"high
 }
 
 /**
- * Multi-turn chat with paper context
+ * Multi-turn chat with paper context.
+ * `paperContext` is the already-retrieved, page-marked context string
+ * produced by `formatRetrievedContext` — full text is never passed here.
  */
 export async function chatWithContext(
   messages: ChatMessage[],
@@ -203,8 +206,8 @@ export async function chatWithContext(
       role: "system",
       content: `你是一个专业的学术论文阅读助手，擅长帮助用户理解和分析学术论文。请根据提供的论文片段回答用户问题。
 
-论文片段：
-${paperContext}
+论文片段（带章节与页码标记，回答时请在关键结论后标注来源页码，如 [p. 3]）：
+${truncateWithMarker(paperContext, TOKEN_BUDGET.chunks * 4)}
 ${goalPrompt}
 回答要求：
 1. **准确性**：基于提供的论文内容进行回答，避免引入外部信息
@@ -279,7 +282,8 @@ export function resetClient(): void {
   openaiClient = null
 }
 
-const MAX_TOOL_CALL_ROUNDS = 5
+// Agentic retrieval can take several rounds for multi-hop questions
+const MAX_TOOL_CALL_ROUNDS = 8
 
 /**
  * Build a concise reading history section for injection into the system prompt.
@@ -362,7 +366,21 @@ export async function agentChat(
   // Build concise reading history section for system prompt
   const readingHistorySection = buildReadingHistorySection(toolContext)
 
-  const contextBlock = formatRetrievedContext(retrievedContext)
+  // Global token budget: the context block is already budgeted inside
+  // retrieveContext, but enforce a hard cap here and record usage so every
+  // turn reports what actually entered the prompt.
+  const budgetReport: TokenBudgetReport = createBudgetReport()
+  const rawContextBlock = formatRetrievedContext(retrievedContext)
+  const contextBlock = truncateWithMarker(rawContextBlock, TOKEN_BUDGET.chunks * 4)
+  if (contextBlock.length < rawContextBlock.length) {
+    budgetReport.truncated.push("chunks")
+  }
+  budgetReport.used.chunks = estimateTokens(contextBlock)
+  budgetReport.used.history = processedMessages.reduce((n, m) => n + estimateTokens(m.content), 0)
+  if (newSummary) {
+    budgetReport.used.history = (budgetReport.used.history || 0) + estimateTokens(newSummary)
+  }
+
   const contextStatus =
     retrievedContext.meta.totalChunks > 0
       ? `已索引 ${retrievedContext.meta.totalChunks} 个片段，本次检索 ${retrievedContext.meta.retrievedChunks} 个片段`
@@ -400,7 +418,9 @@ ${goalPrompt}
   - （原文）：可在提供的片段中找到直接文字依据
   - （归纳）：需要综合多个片段或段落得出
   - （推断）：超出原文的合理推断，必须说明理由
-- 如果检索结果不足以回答问题，明确回答“当前上下文不足以回答该问题”，不要编造
+- 如果检索结果不足以回答问题，优先使用 search_paper_content 工具在论文全文索引中检索补充证据（返回结果自带页码），而不是直接回答"上下文不足"或凭记忆作答
+- 引用 search_paper_content 的结果时，标注其返回的 [chunk N][p. X-Y] 页码
+- 只有在检索后仍无法找到依据时，才明确回答"当前上下文不足以回答该问题"，不要编造
 
 # 工作流程：先思考，后行动
 
@@ -421,6 +441,8 @@ ${goalPrompt}
 
 请根据用户需求灵活运用工具和能力，提供专业的学术阅读辅助服务。`)
   }
+
+  budgetReport.used.systemFixed = estimateTokens(systemMessage.content as string)
 
   const apiMessages: ChatCompletionMessageParam[] = [
     systemMessage,
@@ -469,7 +491,8 @@ ${goalPrompt}
           message: fallbackReply,
           toolCallsExecuted: [],
           fallbackToSimpleChat: true,
-          newSummary
+          newSummary,
+          budgetReport
         }
       }
       throw e
@@ -482,7 +505,8 @@ ${goalPrompt}
         message: "模型未返回有效响应",
         toolCallsExecuted,
         fallbackToSimpleChat: false,
-        newSummary
+        newSummary,
+        budgetReport
       }
     }
 
@@ -495,7 +519,8 @@ ${goalPrompt}
         message: assistantMessage.content || "已完成",
         toolCallsExecuted,
         fallbackToSimpleChat: false,
-        newSummary
+        newSummary,
+        budgetReport
       }
     }
 
@@ -553,7 +578,8 @@ ${goalPrompt}
     message: "已完成所有工具调用，但达到了最大轮数限制。请继续提问以获取更多信息。",
     toolCallsExecuted,
     fallbackToSimpleChat: false,
-    newSummary
+    newSummary,
+    budgetReport
   }
 }
 
@@ -629,32 +655,96 @@ const DIMENSION_LABELS: Record<string, string> = {
 }
 
 /**
+ * Generate a per-paper dimension digest (Map stage of map-reduce comparison).
+ * Evidence blocks carry page markers; the digest must keep page references.
+ */
+export async function generatePaperDimensionDigest(
+  title: string,
+  url: string,
+  evidenceBlock: string,
+  dimText: string,
+  focusText: string
+): Promise<string> {
+  const client = await getClient()
+  const config = await getLLMConfig()
+
+  const response = await client.chat.completions.create({
+    model: config?.model || "deepseek-chat",
+    messages: [
+      {
+        role: "user",
+        content: `你是学术论文对比助手。以下是从论文《${title}》（${url}）全文中检索到的证据片段（带章节与页码标记）。
+
+${evidenceBlock}
+
+## 任务
+针对以下维度提取该论文的要点：${dimText}${focusText}
+
+## 要求
+- 每个维度 2-4 条要点，每条要点末尾标注来源页码与证据类型，如：采用了X方法（[p.4]）（原文）
+- 仅使用证据片段中出现的内容，不要引入外部知识
+- 只输出要点列表，不要输出其他内容`
+      }
+    ],
+    temperature: 0.3,
+    max_tokens: 1500
+  })
+
+  return response.choices[0]?.message?.content || ""
+}
+
+/**
  * Call the LLM to generate a structured comparison of multiple papers.
- * Called from agent-tools.ts case "compare_papers".
+ * Called from comparison.ts handleComparePapers.
+ * In `rag_evidence` mode the prompt includes page-marked evidence blocks and
+ * rows may cite chunk indexes, which are resolved to Evidence objects.
  */
 export async function comparePapersWithLLM(
   snapshots: PaperSnapshot[],
   dimensions: Array<ComparisonDimension | string>,
   paperSummaries: string,
   dimText: string,
-  focusText: string
+  focusText: string,
+  options?: {
+    mode?: "rag_evidence" | "snapshot_fallback"
+    trace?: ComparisonResult["trace"]
+    /** paperUrl → retrieved evidence, used to resolve row-level citations */
+    evidenceByPaper?: Record<string, Evidence[]>
+  }
 ): Promise<ComparisonResult> {
   const client = await getClient()
   const config = await getLLMConfig()
+  const mode = options?.mode || "snapshot_fallback"
 
   const paperTitles = snapshots.map((s, i) => `论文${i + 1}：${s.title}`).join("\n")
+
+  const citationRules =
+    mode === "rag_evidence"
+      ? `
+
+## 页码引用规则（必须遵守）
+- 论文资料中的片段带有 [chunk N][章节][p. 起止页] 标记，其中内容为论文原文
+- 每行 values 中的描述必须来自资料中的证据片段，在结尾标注页码，如：采用X方法（[p.4]）（原文）
+- 每行增加 "evidence" 字段：{"<论文URL>": [该行引用的 chunkIndex 数字数组]}`
+      : ""
+
+  const evidenceFieldSchema =
+    mode === "rag_evidence"
+      ? `,
+      "evidence": {"<论文URL>": [chunkIndex数字]}`
+      : ""
 
   const prompt = `你是一个学术论文对比分析专家。请仔细阅读以下论文资料，并按要求进行结构化对比分析。
 
 ## 待对比论文
 ${paperTitles}
 
-## 论文详细资料
+## 论文详细资料（${mode === "rag_evidence" ? "含带页码的原文证据片段" : "元数据与用户笔记"}）
 ${paperSummaries}
 
 ## 对比任务
 对比维度：${dimText}${focusText}
-
+${citationRules}
 ## 输出要求
 请以 JSON 格式返回对比结果，结构如下：
 {
@@ -666,7 +756,7 @@ ${paperSummaries}
       "values": {
         "<论文URL1>": "该论文在此维度的核心描述（30-80字）",
         "<论文URL2>": "该论文在此维度的核心描述（30-80字）"
-      },
+      }${evidenceFieldSchema},
       "difference": "这一维度上各论文的核心差异（30-60字）"
     }
   ]
@@ -683,12 +773,29 @@ ${paperSummaries}
   })
 
   const content = response.choices[0]?.message?.content || "{}"
-  const parsed: { summary: string; recommendation?: string; rows: Array<{ dimension: string; values: Record<string, string>; difference: string }> } = JSON.parse(content)
+  const parsed: {
+    summary: string
+    recommendation?: string
+    rows: Array<{ dimension: string; values: Record<string, string>; difference: string; evidence?: Record<string, number[]> }>
+  } = JSON.parse(content)
 
   const rows = (parsed.rows || []).map((row) => ({
     dimension: row.dimension as ComparisonDimension | string,
     values: row.values || {},
-    difference: row.difference || ""
+    difference: row.difference || "",
+    // Resolve cited chunk indexes to the actual Evidence objects retrieved
+    evidence:
+      mode === "rag_evidence" && options?.evidenceByPaper
+        ? Object.fromEntries(
+            Object.entries(options.evidenceByPaper).map(([url, all]) => {
+              const cited = row.evidence?.[url]
+              const picked = Array.isArray(cited) && cited.length > 0
+                ? all.filter((ev) => cited.includes(ev.chunkIndex))
+                : all
+              return [url, picked]
+            })
+          )
+        : undefined
   }))
 
   return {
@@ -697,6 +804,8 @@ ${paperSummaries}
     rows,
     summary: parsed.summary || "",
     recommendation: parsed.recommendation,
-    generatedAt: Date.now()
+    generatedAt: Date.now(),
+    mode,
+    trace: options?.trace
   }
 }
