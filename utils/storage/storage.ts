@@ -2,7 +2,7 @@
  * Chrome storage utility for persisting configuration and API keys
  */
 
-import type { ChatMessage, ChatSession, Language, PaperMetadata, PaperSnapshot, SavedComparison, Theme } from "~types"
+import type { ChatMessage, ChatSession, Language, PaperDocument, PaperMetadata, PaperSnapshot, RetrievedContext, SavedComparison, Theme } from "~types"
 import { getSafeAllDistinctUrls, getSafeReadingStatsForUrl } from "~utils/reading/reading-tracker"
 
 export interface LLMConfig {
@@ -75,7 +75,9 @@ const STORAGE_KEYS = {
   METADATA: "metadata",
   UI_LANGUAGE: "ui_language",
   UI_THEME: "ui_theme",
-  COMPARISONS: "comparisons"
+  COMPARISONS: "comparisons",
+  PAPER_CONTEXTS: "paper_contexts",
+  PAPER_DOC_FULLS: "paper_doc_fulls"
 } as const
 
 export async function saveLLMConfig(config: LLMConfig): Promise<void> {
@@ -319,20 +321,31 @@ export async function getChatSessionByUrl(url: string): Promise<ChatSession | nu
   return sessions.find((s) => s.url === url) || null
 }
 
+export interface SaveChatSessionOptions {
+  docHash?: string
+  retrievedContext?: RetrievedContext
+}
+
 export async function saveChatSession(
   url: string,
   pageTitle: string,
   messages: ChatMessage[],
   paperContext: string,
-  summary?: string
+  summary?: string,
+  options: SaveChatSessionOptions = {}
 ): Promise<ChatSession> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.CHAT_SESSIONS)
   const sessions = (result[STORAGE_KEYS.CHAT_SESSIONS] || []) as ChatSession[]
 
+  // New sessions no longer store the full paper text inline; keep a short preview for compatibility.
+  const preview = paperContext.length > 200 ? paperContext.slice(0, 200) + "…" : paperContext
+
   const existingIndex = sessions.findIndex((s) => s.url === url)
   if (existingIndex !== -1) {
     sessions[existingIndex].messages = messages
-    sessions[existingIndex].paperContext = paperContext
+    sessions[existingIndex].paperContext = preview
+    sessions[existingIndex].docHash = options.docHash ?? sessions[existingIndex].docHash
+    sessions[existingIndex].retrievedContext = options.retrievedContext ?? sessions[existingIndex].retrievedContext
     sessions[existingIndex].timestamp = Date.now()
     if (summary !== undefined) {
       sessions[existingIndex].summary = summary
@@ -346,7 +359,9 @@ export async function saveChatSession(
     url,
     pageTitle,
     messages,
-    paperContext,
+    paperContext: preview,
+    docHash: options.docHash,
+    retrievedContext: options.retrievedContext,
     timestamp: Date.now(),
     ...(summary ? { summary } : {})
   }
@@ -360,6 +375,137 @@ export async function deleteChatSession(url: string): Promise<void> {
   const sessions = (result[STORAGE_KEYS.CHAT_SESSIONS] || []) as ChatSession[]
   const filtered = sessions.filter((s) => s.url !== url)
   await chrome.storage.local.set({ [STORAGE_KEYS.CHAT_SESSIONS]: filtered })
+}
+
+// ============= Paper Context Management =============
+
+interface StoredPaperContext extends Omit<PaperDocument, "chunks"> {
+  chunks: Array<Omit<PaperChunk, "text">>
+}
+
+interface StoredPaperDocFull {
+  docHash: string
+  chunks: Array<{ index: number; text: string }>
+}
+
+const MAX_PAPER_DOC_FULL_BYTES = 2 * 1024 * 1024 // 2MB per entry
+const STORAGE_QUOTA_WARNING_BYTES = 4.5 * 1024 * 1024 // 4.5MB total
+
+function estimateJsonSize(obj: unknown): number {
+  try {
+    return new Blob([JSON.stringify(obj)]).size
+  } catch {
+    return 0
+  }
+}
+
+export async function savePaperContext(
+  url: string,
+  doc: PaperDocument
+): Promise<void> {
+  const result = await chrome.storage.local.get([
+    STORAGE_KEYS.PAPER_CONTEXTS,
+    STORAGE_KEYS.PAPER_DOC_FULLS
+  ])
+
+  const contexts = (result[STORAGE_KEYS.PAPER_CONTEXTS] || []) as StoredPaperContext[]
+  const fulls = (result[STORAGE_KEYS.PAPER_DOC_FULLS] || []) as StoredPaperDocFull[]
+
+  // Build lightweight context record (no full text)
+  const contextRecord: StoredPaperContext = {
+    ...doc,
+    chunks: doc.chunks.map(({ text, normalizedText, ...meta }) => meta)
+  }
+
+  const contextIndex = contexts.findIndex((c) => c.url === url)
+  if (contextIndex !== -1) {
+    contexts[contextIndex] = contextRecord
+  } else {
+    contexts.push(contextRecord)
+  }
+
+  // Build full chunk text record keyed by docHash
+  const fullChunks = doc.chunks.map((c) => ({ index: c.index, text: c.text || "" }))
+  let fullRecord: StoredPaperDocFull = { docHash: doc.docHash, chunks: fullChunks }
+
+  // Guard against oversized single entry
+  let truncated = false
+  while (estimateJsonSize(fullRecord) > MAX_PAPER_DOC_FULL_BYTES && fullRecord.chunks.length > 1) {
+    fullRecord.chunks.pop()
+    truncated = true
+  }
+
+  if (truncated) {
+    console.warn(`[Impulse] Paper doc full for ${url} truncated to fit storage quota`)
+    const ctxIndex = contexts.findIndex((c) => c.url === url)
+    if (ctxIndex !== -1) contexts[ctxIndex].truncated = true
+  }
+
+  const fullIndex = fulls.findIndex((f) => f.docHash === doc.docHash)
+  if (fullIndex !== -1) {
+    fulls[fullIndex] = fullRecord
+  } else {
+    fulls.push(fullRecord)
+  }
+
+  // Rough total quota check
+  const totalSize = estimateJsonSize(contexts) + estimateJsonSize(fulls)
+  if (totalSize > STORAGE_QUOTA_WARNING_BYTES) {
+    console.warn(`[Impulse] chrome.storage.local usage (~${Math.round(totalSize / 1024 / 1024)}MB) is approaching quota`)
+  }
+
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.PAPER_CONTEXTS]: contexts,
+    [STORAGE_KEYS.PAPER_DOC_FULLS]: fulls
+  })
+}
+
+export async function getPaperContextByUrl(url: string): Promise<StoredPaperContext | null> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.PAPER_CONTEXTS)
+  const contexts = (result[STORAGE_KEYS.PAPER_CONTEXTS] || []) as StoredPaperContext[]
+  return contexts.find((c) => c.url === url) || null
+}
+
+export async function getPaperDocFull(docHash: string): Promise<Map<number, string> | null> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.PAPER_DOC_FULLS)
+  const fulls = (result[STORAGE_KEYS.PAPER_DOC_FULLS] || []) as StoredPaperDocFull[]
+  const full = fulls.find((f) => f.docHash === docHash)
+  if (!full) return null
+
+  const map = new Map<number, string>()
+  for (const chunk of full.chunks) {
+    map.set(chunk.index, chunk.text)
+  }
+  return map
+}
+
+export async function deletePaperContext(url: string): Promise<void> {
+  const result = await chrome.storage.local.get([
+    STORAGE_KEYS.PAPER_CONTEXTS,
+    STORAGE_KEYS.PAPER_DOC_FULLS
+  ])
+
+  const contexts = (result[STORAGE_KEYS.PAPER_CONTEXTS] || []) as StoredPaperContext[]
+  const fulls = (result[STORAGE_KEYS.PAPER_DOC_FULLS] || []) as StoredPaperDocFull[]
+
+  const target = contexts.find((c) => c.url === url)
+  if (!target) return
+
+  const docHash = target.docHash
+  const filteredContexts = contexts.filter((c) => c.url !== url)
+  const stillReferenced = filteredContexts.some((c) => c.docHash === docHash)
+
+  if (!stillReferenced) {
+    const filteredFulls = fulls.filter((f) => f.docHash !== docHash)
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.PAPER_CONTEXTS]: filteredContexts,
+      [STORAGE_KEYS.PAPER_DOC_FULLS]: filteredFulls
+    })
+  } else {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.PAPER_CONTEXTS]: filteredContexts
+    })
+  }
 }
 
 // ============= Metadata Management =============
@@ -417,11 +563,12 @@ export async function setTheme(theme: Theme): Promise<void> {
  * Returns null if the URL has no meaningful data.
  */
 export async function getPaperSnapshot(url: string): Promise<PaperSnapshot | null> {
-  const [metadata, notes, highlights, session] = await Promise.all([
+  const [metadata, notes, highlights, session, paperContext] = await Promise.all([
     getMetadataByUrl(url),
     getNotesByUrl(url),
     getHighlightsByUrl(url),
-    getChatSessionByUrl(url)
+    getChatSessionByUrl(url),
+    getPaperContextByUrl(url)
   ])
 
   // Enrich with SQLite reading history
@@ -430,6 +577,12 @@ export async function getPaperSnapshot(url: string): Promise<PaperSnapshot | nul
   // Must have at least a title, some notes, highlights, or SQLite reading history
   const hasSqliteData = stats !== null && stats.sessionCount > 0
   if (!metadata?.title && notes.length === 0 && highlights.length === 0 && !hasSqliteData) return null
+
+  const contextPreview =
+    paperContext?.fullSummary?.text?.slice(0, 800) ||
+    Object.values(paperContext?.sectionSummaries || {})[0]?.text?.slice(0, 800) ||
+    session?.paperContext?.slice(0, 800) ||
+    ""
 
   return {
     url,
@@ -443,7 +596,7 @@ export async function getPaperSnapshot(url: string): Promise<PaperSnapshot | nul
       selectedText: n.selectedText.slice(0, 200)
     })),
     highlights: highlights.slice(0, 10).map((h) => h.phrase),
-    contextPreview: session?.paperContext?.slice(0, 800) || "",
+    contextPreview,
     lastVisited: session?.timestamp || notes[0]?.timestamp || stats?.lastVisitTime || 0,
     // SQLite enrichment
     ...(stats ? {

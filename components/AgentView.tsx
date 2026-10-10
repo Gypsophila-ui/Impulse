@@ -6,14 +6,20 @@ import remarkMath from "remark-math"
 import ReactMarkdown from "react-markdown"
 import "katex/dist/katex.min.css"
 
-import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, ReadingGoal, ShowSkillPermissionNoticeCallback } from "~types"
+import type { AgentChatResult, AskUserQuestionParams, AskUserQuestionResult, ChatMessage, PaperDocument, ReadingGoal, RetrievedContext, ShowSkillPermissionNoticeCallback } from "~types"
 import { type ToolExecutionContext } from "~utils/agent/agent-tools"
 import { borderRadius, shadows, transitions } from "~utils/ui/design-tokens"
 import { findSkillByTrigger, searchSkills, SKILLS, type Skill } from "~utils/skills"
 import { getSkillPermissionRequirement, hasPermissions, describePermissionRequirement } from "~utils/permissions"
 import { agentChat } from "~utils/agent/llm-client"
-import { extractPdfText, isPdfUrl, processPdfBuffer } from "~utils/reading/pdf-extractor"
-import { deleteChatSession, saveChatSession } from "~utils/storage/storage"
+import { extractPdfPages, isPdfUrl, processPdfBuffer } from "~utils/reading/pdf-extractor"
+import {
+  buildLegacyRetrievedContext,
+  buildPaperDocument,
+  retrieveContext,
+  type PdfPageText
+} from "~utils/reading/paper-context"
+import { deleteChatSession, deletePaperContext, getPaperContextByUrl, getPaperDocFull, saveChatSession, savePaperContext } from "~utils/storage/storage"
 import { trackEvent } from "~utils/reading/reading-tracker"
 
 import Spinner from "./common/Spinner"
@@ -637,13 +643,18 @@ const AgentView: React.FC<AgentViewProps> = ({
   const [pdfTruncated, setPdfTruncated] = useState(false)
   // Track which URL we've already extracted so we don't re-extract on re-renders
   const extractedUrlRef = useRef<string>("")
+  // Structured paper context
+  const [paperDocument, setPaperDocument] = useState<PaperDocument | null>(null)
+  const [docHash, setDocHash] = useState<string | null>(null)
+  const [retrievalStatus, setRetrievalStatus] = useState<{ indexed: boolean; chunkCount: number; truncated: boolean }>({
+    indexed: false,
+    chunkCount: 0,
+    truncated: false
+  })
 
   // Auto-extract PDF text when AgentView mounts or URL changes
   useEffect(() => {
     if (!currentUrl || !isPdfUrl(currentUrl)) return
-    // Already have context (manually set or previously extracted)
-    if (chatContext && extractedUrlRef.current === currentUrl) return
-    // Already extracted this URL
     if (extractedUrlRef.current === currentUrl) return
 
     const run = async () => {
@@ -652,18 +663,53 @@ const AgentView: React.FC<AgentViewProps> = ({
       extractedUrlRef.current = currentUrl
 
       try {
-        const result = await extractPdfText(currentUrl)
+        // Try to restore existing structured context first
+        const existingContext = await getPaperContextByUrl(currentUrl)
+        if (existingContext) {
+          const fullMap = await getPaperDocFull(existingContext.docHash)
+          const restoredDoc: PaperDocument = {
+            ...existingContext,
+            chunks: existingContext.chunks.map((c) => ({
+              ...c,
+              text: fullMap?.get(c.index) || "",
+              normalizedText: ""
+            }))
+          }
+          setPaperDocument(restoredDoc)
+          setDocHash(restoredDoc.docHash)
+          onSetChatContext(restoredDoc.fullSummary?.text || "")
+          setPdfPageCount(restoredDoc.pageCount)
+          setPdfTruncated(restoredDoc.truncated)
+          setRetrievalStatus({
+            indexed: true,
+            chunkCount: restoredDoc.chunks.length,
+            truncated: restoredDoc.truncated
+          })
+          setPdfExtracting(false)
+          return
+        }
+
+        // Extract and chunk the PDF
+        const result = await extractPdfPages(currentUrl)
         if (result.error) {
           setPdfExtractError(result.error)
-          // 即使提取失败，也设置一个空的上下文，避免阻塞渲染
           onSetChatContext("")
-        } else if (result.text) {
-          onSetChatContext(result.text)
-          setPdfPageCount(result.pageCount)
-          setPdfTruncated(result.truncated)
+          setRetrievalStatus({ indexed: false, chunkCount: 0, truncated: false })
+        } else if (result.pages.length > 0) {
+          const doc = buildPaperDocument(currentUrl, currentTitle, result.pages)
+          await savePaperContext(currentUrl, doc)
+          setPaperDocument(doc)
+          setDocHash(doc.docHash)
+          onSetChatContext(doc.fullSummary?.text || "")
+          setPdfPageCount(doc.pageCount)
+          setPdfTruncated(doc.truncated)
+          setRetrievalStatus({
+            indexed: true,
+            chunkCount: doc.chunks.length,
+            truncated: doc.truncated
+          })
         }
       } catch (e: any) {
-        // 捕获任何未预期的错误
         setPdfExtractError(`PDF 提取异常: ${e?.message ?? String(e)}`)
         onSetChatContext("")
       } finally {
@@ -738,7 +784,19 @@ const AgentView: React.FC<AgentViewProps> = ({
     onSetLastToolCalls([])
 
     try {
-      const context = chatContext || selectedText
+      // Build retrieved context for the current query
+      let retrievedContext: RetrievedContext
+      if (paperDocument) {
+        const fullMap = await getPaperDocFull(paperDocument.docHash)
+        retrievedContext = retrieveContext(
+          paperDocument,
+          fullMap || new Map(),
+          input,
+          selectedText
+        )
+      } else {
+        retrievedContext = buildLegacyRetrievedContext(chatContext || selectedText)
+      }
 
       // Fetch reading history for agent context (sync, safe — returns null if DB not ready)
       const { getSafeReadingSummary, getSafeReadingStatsForUrl } = await import("~utils/reading/reading-tracker")
@@ -754,12 +812,13 @@ const AgentView: React.FC<AgentViewProps> = ({
         askUserQuestion: onAskUserQuestion,
         showPermissionNotice: onShowPermissionNotice,
         readingSummary,
-        currentUrlStats
+        currentUrlStats,
+        retrievedContext
       }
 
       const result: AgentChatResult = await agentChat(
         apiMessages,
-        context,
+        retrievedContext,
         toolContext,
         (status, phase) => {
           onSetAgentStatus(status)
@@ -778,7 +837,14 @@ const AgentView: React.FC<AgentViewProps> = ({
         if (result.toolCallsExecuted) {
           onSetLastToolCalls(result.toolCallsExecuted)
         }
-        await saveChatSession(currentUrl, currentTitle, updatedMessages, context, result.newSummary || chatSummary)
+        await saveChatSession(
+          currentUrl,
+          currentTitle,
+          updatedMessages,
+          chatContext || selectedText,
+          result.newSummary || chatSummary,
+          { docHash: docHash || undefined, retrievedContext }
+        )
         trackEvent("agent_message", { messages_count: updatedMessages.length, tool_calls: result.toolCallsExecuted?.length || 0, goal: readingGoal })
       } else {
         onSetChatMessages([...displayMessages, { role: "assistant", content: `Error: ${result.message}` }])
@@ -795,7 +861,13 @@ const AgentView: React.FC<AgentViewProps> = ({
     if (confirm("Clear chat history for this page?")) {
       onSetChatMessages([])
       onSetChatContext("")
+      setPaperDocument(null)
+      setDocHash(null)
+      setRetrievalStatus({ indexed: false, chunkCount: 0, truncated: false })
       await deleteChatSession(currentUrl)
+      if (confirm("同时删除已建立的论文上下文索引？")) {
+        await deletePaperContext(currentUrl)
+      }
     }
   }
 
@@ -913,9 +985,13 @@ const AgentView: React.FC<AgentViewProps> = ({
             <span>
               {isPdfUrl(currentUrl) && pdfPageCount !== null ? (
                 <>
-                  <span style={{ fontWeight: 600 }}>已加载 PDF 全文</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {retrievalStatus.indexed ? "已建立论文索引" : "已加载 PDF 全文"}
+                  </span>
                   {" · "}{pdfPageCount} 页
-                  {pdfTruncated && " · 已截取前 60k 字符"}
+                  {retrievalStatus.indexed && ` · ${retrievalStatus.chunkCount} 个片段`}
+                  {retrievalStatus.truncated && " · 已截取"}
+                  {!retrievalStatus.indexed && pdfTruncated && " · 已截取前 60k 字符"}
                 </>
               ) : (
                 <>

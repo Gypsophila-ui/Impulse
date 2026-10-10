@@ -48,9 +48,10 @@ echo ""
 echo "📦 Utils Files"
 echo "------------------------"
 
-test_check "utils/storage.ts exists" "[ -f utils/storage.ts ]"
-test_check "utils/llm-client.ts exists" "[ -f utils/llm-client.ts ]"
-test_check "utils/get-selection.ts exists" "[ -f utils/get-selection.ts ]"
+test_check "utils/storage/storage.ts exists" "[ -f utils/storage/storage.ts ]"
+test_check "utils/agent/llm-client.ts exists" "[ -f utils/agent/llm-client.ts ]"
+test_check "utils/reading/get-selection.ts exists" "[ -f utils/reading/get-selection.ts ]"
+test_check "utils/reading/paper-context.ts exists" "[ -f utils/reading/paper-context.ts ]"
 
 echo ""
 echo "📜 Content Scripts"
@@ -77,9 +78,9 @@ test_check "sidepanel.tsx syntax" "grep -q 'export default function' sidepanel.t
 test_check "options.tsx syntax" "grep -q 'export default function' options.tsx"
 
 # Test: Required imports
-test_check "OpenAI imported in llm-client" "grep -q 'import OpenAI' utils/llm-client.ts"
+test_check "OpenAI imported in llm-client" "grep -q 'import OpenAI' utils/agent/llm-client.ts"
 test_check "React imported in sidepanel" "grep -q 'import React' sidepanel.tsx"
-test_check "Chrome storage used" "grep -q 'chrome.storage' utils/storage.ts"
+test_check "Chrome storage used" "grep -q 'chrome.storage' utils/storage/storage.ts"
 
 echo ""
 echo "⚙️  Configuration Tests"
@@ -111,19 +112,19 @@ echo "🤖 AI Features"
 echo "------------------------"
 
 # Test: LLM functions
-test_check "summarize function" "grep -q 'export async function summarize' utils/llm-client.ts"
-test_check "translate function" "grep -q 'export async function translate' utils/llm-client.ts"
-test_check "generateHighlights function" "grep -q 'export async function generateHighlights' utils/llm-client.ts"
+test_check "summarize function" "grep -q 'export async function summarize' utils/agent/llm-client.ts"
+test_check "translate function" "grep -q 'export async function translate' utils/agent/llm-client.ts"
+test_check "generateHighlights function" "grep -q 'export async function generateHighlights' utils/agent/llm-client.ts"
 
 echo ""
 echo "💾 Storage Functions"
 echo "------------------------"
 
 # Test: Storage API
-test_check "saveNote function" "grep -q 'export async function saveNote' utils/storage.ts"
-test_check "getNotesByUrl function" "grep -q 'export async function getNotesByUrl' utils/storage.ts"
-test_check "saveHighlights function" "grep -q 'export async function saveHighlights' utils/storage.ts"
-test_check "getHighlightsByUrl function" "grep -q 'export async function getHighlightsByUrl' utils/storage.ts"
+test_check "saveNote function" "grep -q 'export async function saveNote' utils/storage/storage.ts"
+test_check "getNotesByUrl function" "grep -q 'export async function getNotesByUrl' utils/storage/storage.ts"
+test_check "saveHighlights function" "grep -q 'export async function saveHighlights' utils/storage/storage.ts"
+test_check "getHighlightsByUrl function" "grep -q 'export async function getHighlightsByUrl' utils/storage/storage.ts"
 
 echo ""
 echo "🎯 Content Script Tests"

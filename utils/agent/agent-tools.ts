@@ -1,4 +1,4 @@
-import type { AskUserQuestionCallback, ShowSkillPermissionNoticeCallback } from "~types"
+import type { AskUserQuestionCallback, RetrievedContext, ShowSkillPermissionNoticeCallback } from "~types"
 import type { HighlightCategory } from "~utils/storage/storage"
 import { getHighlightColor } from "~utils/storage/storage"
 
@@ -23,6 +23,8 @@ export interface ToolExecutionContext {
     firstVisitTime: number | null
     lastVisitTime: number | null
   } | null
+  /** Structured retrieved context for the current query */
+  retrievedContext?: RetrievedContext | null
 }
 
 export interface ToolResult {

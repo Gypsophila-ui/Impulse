@@ -86,7 +86,12 @@ export interface ChatSession {
   url: string
   pageTitle: string
   messages: ChatMessage[]
+  /** Legacy full-text context. Kept for backward compatibility; new sessions leave this empty. */
   paperContext: string
+  /** Document hash linking to a structured PaperDocument */
+  docHash?: string
+  /** Snapshot of the last retrieved context for this session */
+  retrievedContext?: RetrievedContext
   timestamp: number
   summary?: string
 }
@@ -158,6 +163,116 @@ export const READING_GOAL_CONFIG: Record<ReadingGoal, { labelKey: string; descri
   prepare_citation: {
     labelKey: "readingGoal.prepareCitation",
     descriptionKey: "readingGoal.prepareCitationDesc"
+  }
+}
+
+// ─── Paper Context Types ───────────────────────────────────────────────────
+
+/**
+ * A single chunk of a paper, used as the minimum retrievable unit.
+ */
+export interface PaperChunk {
+  /** Global unique id: `<docHash>_<index>` */
+  id: string
+  /** Sequential index within the document, 0-based */
+  index: number
+  /** Section path, e.g. ["Abstract", "1 Introduction", "1.1 Motivation"] */
+  sectionPath: string[]
+  /** Start page (1-based, inclusive) */
+  startPage: number
+  /** End page (1-based, inclusive) */
+  endPage: number
+  /** Character range in the full document text */
+  charRange: { start: number; end: number }
+  /** Full chunk text. Omitted in the lightweight index record. */
+  text?: string
+  /** Normalized text (headers/footers removed) used for retrieval */
+  normalizedText?: string
+  /** Character count */
+  charCount: number
+  /** Conservative token estimate (CJK / 2.5, others / 4) */
+  estimatedTokens: number
+  /** Extracted keywords (deduped, lowercased, stopwords removed) */
+  keywords: string[]
+  /** Term frequency for keyword weighting */
+  termFrequency?: Record<string, number>
+  /** Special block flags */
+  isTable?: boolean
+  isFormula?: boolean
+  isHeaderFooter?: boolean
+  /** Whether the chunk boundary cut through original content */
+  truncatedBoundary?: boolean
+  /** Reserved for future embedding support */
+  embedding?: number[]
+}
+
+/**
+ * Summary node for a section or the whole paper.
+ */
+export interface PaperSectionSummary {
+  title: string
+  text: string
+  sourceChunkIndexes: number[]
+  pageRange: { start: number; end: number }
+  status: "pending" | "done" | "failed"
+  error?: string
+  estimatedTokens: number
+  generatedAt?: number
+}
+
+/**
+ * A structured paper document built from PDF extraction + chunking.
+ */
+export interface PaperDocument {
+  url: string
+  title: string
+  docHash: string
+  pageCount: number
+  truncated: boolean
+  chunks: PaperChunk[]
+  sectionSummaries: Record<string, PaperSectionSummary>
+  fullSummary?: PaperSectionSummary
+  keywords: string[]
+  version: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** Lightweight persistence record: same shape as PaperDocument but chunk.text omitted */
+export type PaperContextRecord = Omit<PaperDocument, "chunks"> & {
+  chunks: Array<Omit<PaperChunk, "text">>
+}
+
+/**
+ * Evidence citation returned by the agent for a claim.
+ */
+export type EvidenceType = "direct" | "inductive" | "inferred"
+export type EvidenceConfidence = "high" | "medium" | "low"
+
+export interface Evidence {
+  chunkIndex: number
+  sectionPath: string[]
+  pageRange: { start: number; end: number }
+  quote: string
+  type: EvidenceType
+  confidence: EvidenceConfidence
+}
+
+/**
+ * Context retrieved for a single user query and injected into the LLM prompt.
+ */
+export interface RetrievedContext {
+  fullSummary: string
+  chunks: Array<PaperChunk & { score: number; matchReason?: string }>
+  sectionSummaries: PaperSectionSummary[]
+  neighborChunks: PaperChunk[]
+  meta: {
+    totalChunks: number
+    retrievedChunks: number
+    query: string
+    confidence: "high" | "medium" | "low"
+    reason?: string
+    contextTruncated: boolean
   }
 }
 

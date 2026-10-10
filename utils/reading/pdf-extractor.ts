@@ -18,6 +18,19 @@ export interface PdfExtractResult {
   error?: string
 }
 
+export interface PdfPageText {
+  pageNumber: number
+  text: string
+  charCount: number
+}
+
+export interface PdfPagesResult {
+  pages: PdfPageText[]
+  pageCount: number
+  truncated: boolean
+  error?: string
+}
+
 // Max characters to extract — keeps token usage reasonable (~60k chars ≈ ~15k tokens)
 const MAX_CHARS = 60_000
 
@@ -100,22 +113,82 @@ export async function extractPdfText(url: string): Promise<PdfExtractResult> {
   }
 }
 
-export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExtractResult> {
+/**
+ * Extract PDF text as structured pages for downstream chunking.
+ */
+export async function extractPdfPages(url: string): Promise<PdfPagesResult> {
   try {
-    // Load the PDF document
+    if (url.startsWith('file://')) {
+      return {
+        pages: [],
+        pageCount: 0,
+        truncated: false,
+        error: "浏览器安全限制：无法直接读取本地 PDF 文件。建议：1) 使用在线 PDF 链接 2) 手动复制内容到聊天框"
+      }
+    }
+
+    let fetchUrl = url
+    if (url.includes('arxiv.org/pdf/')) {
+      const base = url.split(/[?#]/)[0]
+      const stripped = base.replace(/v\d+$/i, '')
+      fetchUrl = stripped.endsWith('.pdf') ? stripped : stripped + '.pdf'
+    }
+
+    let response: Response
+    try {
+      response = await fetch(fetchUrl)
+    } catch (e: any) {
+      return {
+        pages: [],
+        pageCount: 0,
+        truncated: false,
+        error: `PDF 获取失败（网络错误）: ${e?.message || '请检查网络连接'}`
+      }
+    }
+
+    if (!response.ok) {
+      let detail = ""
+      try {
+        const text = await response.text()
+        const title = text.match(/<title>(.*?)<\/title>/i)?.[1]
+        if (title) detail = ` (${title})`
+      } catch { /* ignore */ }
+      return {
+        pages: [],
+        pageCount: 0,
+        truncated: false,
+        error: `PDF 获取失败: HTTP ${response.status} ${response.statusText}${detail}`
+      }
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    return await processPdfBufferToPages(arrayBuffer)
+  } catch (e: any) {
+    const msg = e?.message ?? String(e)
+    return {
+      pages: [],
+      pageCount: 0,
+      truncated: false,
+      error: msg.includes("password")
+        ? "PDF 受密码保护，无法提取文本"
+        : `PDF 处理失败: ${msg}`
+    }
+  }
+}
+
+export async function processPdfBufferToPages(arrayBuffer: ArrayBuffer): Promise<PdfPagesResult> {
+  try {
     const loadingTask = pdfjs.getDocument({
       data: arrayBuffer,
-      // Disable range requests — we already have the full buffer
       disableRange: true,
       disableStream: true,
-      // Disable workers fetch (we provide the data directly)
       isEvalSupported: false
     })
 
     const pdf = await loadingTask.promise
     const pageCount = pdf.numPages
 
-    const chunks: string[] = []
+    const pages: PdfPageText[] = []
     let totalChars = 0
     let truncated = false
 
@@ -128,7 +201,6 @@ export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExt
       const page = await pdf.getPage(i)
       const textContent = await page.getTextContent()
 
-      // Join text items, preserving rough paragraph structure
       let pageText = ""
       let lastY: number | null = null
 
@@ -136,7 +208,6 @@ export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExt
         if ("str" in item) {
           const currentY = "transform" in item ? item.transform[5] : null
 
-          // Insert newline when vertical position changes significantly (new line/paragraph)
           if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 5) {
             pageText += "\n"
           }
@@ -145,31 +216,22 @@ export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExt
         }
       }
 
-      // Clean up excessive whitespace
       pageText = pageText
         .replace(/ {2,}/g, " ")
         .replace(/\n{3,}/g, "\n\n")
         .trim()
 
       if (pageText) {
-        chunks.push(`[Page ${i}]\n${pageText}`)
+        pages.push({ pageNumber: i, text: pageText, charCount: pageText.length })
         totalChars += pageText.length
       }
     }
 
-    let text = chunks.join("\n\n")
-
-    if (text.length > MAX_CHARS) {
-      text = text.slice(0, MAX_CHARS)
-      truncated = true
-    }
-
-    return { text, pageCount, truncated }
+    return { pages, pageCount, truncated }
   } catch (e: any) {
-    // Encrypted or corrupted PDF
     const msg = e?.message ?? String(e)
     return {
-      text: "",
+      pages: [],
       pageCount: 0,
       truncated: false,
       error: msg.includes("password")
@@ -177,6 +239,24 @@ export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExt
         : `PDF 解析失败: ${msg}`
     }
   }
+}
+
+export async function processPdfBuffer(arrayBuffer: ArrayBuffer): Promise<PdfExtractResult> {
+  const result = await processPdfBufferToPages(arrayBuffer)
+  if (result.error) {
+    return { text: "", pageCount: 0, truncated: false, error: result.error }
+  }
+
+  const chunks = result.pages.map((p) => `[Page ${p.pageNumber}]\n${p.text}`)
+  let text = chunks.join("\n\n")
+  let truncated = result.truncated
+
+  if (text.length > MAX_CHARS) {
+    text = text.slice(0, MAX_CHARS)
+    truncated = true
+  }
+
+  return { text, pageCount: result.pageCount, truncated }
 }
 
 /**

@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
 
-import type { AgentChatResult, AgentStatusCallback, ChatMessage, ComparisonDimension, ComparisonResult, PaperMetadata, PaperSnapshot, ReadingGoal } from "~types"
+import type { AgentChatResult, AgentStatusCallback, ChatMessage, ComparisonDimension, ComparisonResult, PaperMetadata, PaperSnapshot, ReadingGoal, RetrievedContext } from "~types"
 import {
   executeToolCall,
   formatToolResultForLLM,
@@ -12,6 +12,7 @@ import {
 import { PAPER_TOOLS, getToolPrompt } from "./tool-definitions"
 import { getLLMConfig } from "~utils/storage/storage"
 import { getSkillCatalogText } from "~utils/skills"
+import { buildLegacyRetrievedContext, formatRetrievedContext } from "~utils/reading/paper-context"
 
 let openaiClient: OpenAI | null = null
 
@@ -326,7 +327,7 @@ function buildReadingHistorySection(toolContext: ToolExecutionContext): string {
 
 export async function agentChat(
   messages: ChatMessage[],
-  paperContext: string,
+  paperContext: RetrievedContext | string,
   toolContext: ToolExecutionContext,
   onStatus?: AgentStatusCallback,
   existingSummary?: string,
@@ -334,6 +335,11 @@ export async function agentChat(
 ): Promise<AgentChatResult> {
   const client = await getClient()
   const config = await getLLMConfig()
+
+  const retrievedContext: RetrievedContext =
+    typeof paperContext === "string"
+      ? buildLegacyRetrievedContext(paperContext)
+      : paperContext
 
   const toolCallsExecuted: AgentChatResult["toolCallsExecuted"] = []
 
@@ -356,6 +362,12 @@ export async function agentChat(
   // Build concise reading history section for system prompt
   const readingHistorySection = buildReadingHistorySection(toolContext)
 
+  const contextBlock = formatRetrievedContext(retrievedContext)
+  const contextStatus =
+    retrievedContext.meta.totalChunks > 0
+      ? `已索引 ${retrievedContext.meta.totalChunks} 个片段，本次检索 ${retrievedContext.meta.retrievedChunks} 个片段`
+      : "未加载结构化上下文"
+
   const systemMessage = {
     role: "system" as const,
     content: sanitizeForApi(`你是一个专业的学术论文阅读与研究助手 Agent，专注于帮助用户高效阅读和理解学术论文。
@@ -377,11 +389,19 @@ ${summarySection}
 # 当前上下文
 - 页面标题：${toolContext.currentTitle}
 - 选中文本：${toolContext.selectedText?.slice(0, 500) || "无"}${(toolContext.selectedText?.length || 0) > 500 ? "..." : ""}
-- 论文全文：${toolContext.paperText ? `已加载 (${toolContext.paperText.length} 字符)` : "未加载"}
+- 论文上下文状态：${contextStatus}
 ${readingHistorySection}
 # 论文片段
-${paperContext}
+${contextBlock}
 ${goalPrompt}
+# 证据与引用规则
+- 每个涉及论文事实的关键结论后必须标注来源，格式：[chunkIndex][章节路径，p. 起止页]
+- 区分证据类型：
+  - （原文）：可在提供的片段中找到直接文字依据
+  - （归纳）：需要综合多个片段或段落得出
+  - （推断）：超出原文的合理推断，必须说明理由
+- 如果检索结果不足以回答问题，明确回答“当前上下文不足以回答该问题”，不要编造
+
 # 工作流程：先思考，后行动
 
 对于每个用户请求，请遵循以下思维框架：
@@ -441,7 +461,9 @@ ${goalPrompt}
 
       if (isToolCallingUnsupported) {
         onStatus?.("模型不支持工具调用，使用普通对话", "complete")
-        const fallbackReply = await chatWithContext(messages, paperContext)
+        const fallbackContext =
+          typeof paperContext === "string" ? paperContext : formatRetrievedContext(paperContext)
+        const fallbackReply = await chatWithContext(messages, fallbackContext)
         return {
           success: true,
           message: fallbackReply,
