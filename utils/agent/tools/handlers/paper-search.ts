@@ -1,7 +1,9 @@
 import { loadPaperDocForRetrieval } from "~utils/storage/storage"
 import { retrieveContext } from "~utils/reading/paper-context"
 import type { PaperDocument } from "~types"
+import { fail } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
+import { classifyError } from "../../tool-error"
 import type { ToolHandler } from "../registry"
 
 const MAX_RESULT_CHUNK_CHARS = 1200
@@ -17,26 +19,22 @@ async function handleSearchPaperContent(
 ): Promise<ToolResult> {
   const query = args.query as string
   if (!query?.trim()) {
-    return { success: false, error: "query 为空", message: "检索失败：请提供查询词（使用论文中的核心术语效果最佳）" }
+    return fail("INVALID_ARGS", "检索失败：请提供查询词（使用论文中的核心术语效果最佳）")
   }
 
   const url = (args.url as string)?.trim() || context.currentUrl
   if (!url) {
-    return { success: false, error: "无法确定论文", message: "检索失败：未指定论文且当前页面不是论文页" }
+    return fail("INVALID_ARGS", "检索失败：未指定论文且当前页面不是论文页")
   }
 
   let loaded: { doc: PaperDocument; fullChunks: Map<number, string> } | null = null
   try {
     loaded = await loadPaperDocForRetrieval(url)
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `检索失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `检索失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
   if (!loaded) {
-    return {
-      success: false,
-      error: "NO_INDEX",
-      message: `该论文尚未建立结构化索引（${url}）。请在 Impulse 内置 PDF 查看器中打开该论文以建立索引，或改用 get_paper_summary 获取摘要信息。`
-    }
+    return fail("NOT_FOUND", `该论文尚未建立结构化索引（${url}）。请在 Impulse 内置 PDF 查看器中打开该论文以建立索引，或改用 get_paper_summary 获取摘要信息。`)
   }
 
   let doc = loaded.doc

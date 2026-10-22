@@ -1,4 +1,6 @@
+import { fail } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
+import { classifyError } from "../../tool-error"
 import type { ToolHandler } from "../registry"
 
 async function handleAskUserQuestion(
@@ -12,14 +14,14 @@ async function handleAskUserQuestion(
   const placeholder = args.placeholder as string | undefined
 
   if (!question?.trim()) {
-    return { success: false, error: "问题不能为空", message: "提问失败：问题为空" }
+    return fail("INVALID_ARGS", "提问失败：问题为空")
   }
   if (!options?.length) {
-    return { success: false, error: "选项不能为空", message: "提问失败：请提供选项" }
+    return fail("INVALID_ARGS", "提问失败：请提供选项")
   }
 
   if (!context.askUserQuestion) {
-    return { success: false, error: "askUserQuestion 回调未配置", message: "提问失败：系统未配置用户交互功能" }
+    return fail("INTERNAL_ERROR", "提问失败：系统未配置用户交互功能")
   }
 
   try {
@@ -38,10 +40,11 @@ async function handleAskUserQuestion(
       message: `用户回答：${result.selected}`
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `提问失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `提问失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
 export const userInteractionHandlers: ToolHandler[] = [
-  { name: "ask_user_question", execute: handleAskUserQuestion }
+  // 交互式工具：重试会二次打扰用户，禁止重试
+  { name: "ask_user_question", execute: handleAskUserQuestion, retryable: false }
 ]

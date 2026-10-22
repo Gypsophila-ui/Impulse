@@ -51,10 +51,14 @@ export interface AgentChatResult {
       success: boolean
       message: string
       data?: unknown
+      /** 归一化错误码（success=false 时存在） */
+      code?: string
     }
   }>
   fallbackToSimpleChat: boolean
   newSummary?: string
+  /** 循环终止原因（熔断 / 最大轮数） */
+  terminatedBy?: "max_rounds" | "consecutive_failures"
   /** Token usage / truncation report for the assembled prompt (context budgeting) */
   budgetReport?: { used: Record<string, number>; truncated: string[] }
 }

@@ -9,7 +9,9 @@ import {
   hasPermissions
 } from "~utils/permissions"
 import type { SkillPermissionNotice } from "~types"
+import { fail } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
+import { classifyError } from "../../tool-error"
 import type { ToolHandler } from "../registry"
 
 async function handleListSkills(
@@ -17,23 +19,27 @@ async function handleListSkills(
   _context: ToolExecutionContext,
   _onStatus?: ToolExecutionCallback
 ): Promise<ToolResult> {
-  return {
-    success: true,
-    data: {
-      skills: SKILLS.map((s) => ({
-        trigger: s.trigger,
-        label: s.label,
-        description: s.description,
-        detailedDescription: s.detailedDescription,
-        examples: s.examples,
-        tags: s.tags,
-        category: s.category,
-        toolsUsed: s.toolsUsed,
-        permissions: s.permissions,
-        requiresHostPermission: s.requiresHostPermission
-      }))
-    },
-    message: `已列出 ${SKILLS.length} 个可用技能`
+  try {
+    return {
+      success: true,
+      data: {
+        skills: SKILLS.map((s) => ({
+          trigger: s.trigger,
+          label: s.label,
+          description: s.description,
+          detailedDescription: s.detailedDescription,
+          examples: s.examples,
+          tags: s.tags,
+          category: s.category,
+          toolsUsed: s.toolsUsed,
+          permissions: s.permissions,
+          requiresHostPermission: s.requiresHostPermission
+        }))
+      },
+      message: `已列出 ${SKILLS.length} 个可用技能`
+    }
+  } catch (e: any) {
+    return fail(classifyError(e), `列出技能失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
@@ -46,22 +52,24 @@ async function handleInvokeSkill(
   const userHint = args.user_hint ? String(args.user_hint) : undefined
 
   if (!trigger) {
-    return { success: false, error: "缺少 trigger", message: "调用技能失败：缺少 trigger" }
+    return fail("INVALID_ARGS", "调用技能失败：缺少 trigger")
   }
 
   const skill = findSkillByTrigger(trigger)
   if (!skill) {
-    return {
-      success: false,
-      error: "SKILL_NOT_FOUND",
-      message: `未找到 trigger 为 /${trigger} 的技能。可用技能：${SKILLS.map((s) => "/" + s.trigger).join(", ")}`
-    }
+    return fail("NOT_FOUND", `未找到 trigger 为 /${trigger} 的技能。可用技能：${SKILLS.map((s) => "/" + s.trigger).join(", ")}`)
   }
 
-  const permissionReq = getSkillPermissionRequirement(skill, context.currentUrl)
-  const hasAll = await hasPermissions(permissionReq)
+  let hasAll: boolean
+  try {
+    const permissionReq = getSkillPermissionRequirement(skill, context.currentUrl)
+    hasAll = await hasPermissions(permissionReq)
+  } catch (e) {
+    return fail("INTERNAL_ERROR", `调用技能权限检查异常：${(e as any)?.message ?? e}`, String((e as any)?.message ?? e))
+  }
 
   if (!hasAll) {
+    const permissionReq = getSkillPermissionRequirement(skill, context.currentUrl)
     const notice: SkillPermissionNotice = {
       skillName: skill.label,
       permissions: permissionReq.permissions,
@@ -75,11 +83,7 @@ async function handleInvokeSkill(
       // ignore notice errors
     }
 
-    return {
-      success: false,
-      error: "PERMISSION_DENIED",
-      message: notice.message
-    }
+    return fail("PERMISSION_DENIED", notice.message)
   }
 
   const prompt = userHint ? `${skill.prompt}\n\n${userHint}` : skill.prompt

@@ -2,6 +2,7 @@ import type { AskUserQuestionCallback, RetrievedContext, ShowSkillPermissionNoti
 import type { HighlightCategory } from "~utils/storage/storage"
 import { getHighlightColor } from "~utils/storage/storage"
 import { truncateWithMarker } from "./token-budget"
+import type { ToolErrorCode } from "./tool-error"
 
 // ─── Context & Result types ────────────────────────────────────────────────
 
@@ -31,8 +32,19 @@ export interface ToolExecutionContext {
 export interface ToolResult {
   success: boolean
   data?: unknown
+  /** 归一化错误码（success=false 时必有） */
+  code?: ToolErrorCode
+  /** 人类/LLM 可读的错误明细 */
   error?: string
+  /** 始终存在的摘要消息 */
   message: string
+  /** 实际发生的重试次数（默认 0，用于透明性） */
+  retries?: number
+}
+
+/** 构造一个结构化失败结果（确保总是携带 code） */
+export function fail(code: ToolErrorCode, message: string, error?: string): ToolResult {
+  return { success: false, code, error: error ?? message, message }
 }
 
 export type ToolExecutionCallback = (
@@ -583,7 +595,8 @@ export function formatToolResultForLLM(result: ToolResult): string {
       text = JSON.stringify(result.data, null, 2)
     }
   } else {
-    text = `Error: ${result.error || result.message}`
+    const codeLabel = result.code ? ` [${result.code}]` : ""
+    text = `Error${codeLabel}: ${result.error || result.message}`
   }
 
   text = sanitizeForApi(text)

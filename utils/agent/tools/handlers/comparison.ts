@@ -5,7 +5,9 @@ import {
   saveComparison
 } from "~utils/storage/storage"
 import { trackEvent } from "~utils/reading/reading-tracker"
+import { fail } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
+import { classifyError } from "../../tool-error"
 import type { ToolHandler } from "../registry"
 
 async function handleListCandidatePapers(
@@ -31,7 +33,7 @@ async function handleListCandidatePapers(
       message: `找到 ${sliced.length} 篇可对比论文：\n${list}`
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `获取论文列表失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `获取论文列表失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
@@ -42,12 +44,12 @@ async function handleGetPaperSummary(
 ): Promise<ToolResult> {
   const url = args.url as string
   if (!url?.trim()) {
-    return { success: false, error: "URL 为空", message: "获取摘要失败：请提供论文 URL" }
+    return fail("INVALID_ARGS", "获取摘要失败：请提供论文 URL")
   }
   try {
     const snapshot = await getPaperSnapshot(url)
     if (!snapshot) {
-      return { success: false, error: "未找到该论文", message: `未找到 URL 为 ${url} 的论文数据，请确认该论文已被阅读并有笔记或高亮记录` }
+      return fail("NOT_FOUND", `未找到 URL 为 ${url} 的论文数据，请确认该论文已被阅读并有笔记或高亮记录`)
     }
     return {
       success: true,
@@ -55,7 +57,7 @@ async function handleGetPaperSummary(
       message: `已获取《${snapshot.title}》的摘要（${snapshot.notes.length} 条笔记，${snapshot.highlights.length} 个高亮）`
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `获取论文摘要失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `获取论文摘要失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
@@ -69,10 +71,10 @@ async function handleComparePapers(
   const focus = (args.focus as string) || ""
 
   if (!paperUrls?.length || paperUrls.length < 2) {
-    return { success: false, error: "至少需要 2 篇论文", message: "对比失败：请提供至少 2 篇论文的 URL" }
+    return fail("INVALID_ARGS", "对比失败：请提供至少 2 篇论文的 URL")
   }
   if (paperUrls.length > 5) {
-    return { success: false, error: "最多支持 5 篇", message: "对比失败：最多同时对比 5 篇论文" }
+    return fail("INVALID_ARGS", "对比失败：最多同时对比 5 篇论文")
   }
 
   try {
@@ -82,11 +84,7 @@ async function handleComparePapers(
     const validSnapshots = snapshots.filter((s): s is PaperSnapshot => s !== null)
 
     if (validSnapshots.length < 2) {
-      return {
-        success: false,
-        error: "有效论文不足",
-        message: `对比失败：只找到 ${validSnapshots.length} 篇有效论文数据，至少需要 2 篇。请确认论文已被阅读并有笔记或元数据记录。`
-      }
+      return fail("NOT_FOUND", `对比失败：只找到 ${validSnapshots.length} 篇有效论文数据，至少需要 2 篇。请确认论文已被阅读并有笔记或元数据记录。`)
     }
 
     const { retrievePaperEvidence, formatEvidenceBlock, buildComparisonQuery } = await import(
@@ -199,7 +197,7 @@ ${noteText}
       message: `已完成 ${validSnapshots.length} 篇论文的对比分析（维度：${dimText}，${modeHint}）`
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `对比生成失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `对比生成失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
@@ -212,10 +210,10 @@ async function handleSaveComparison(
   const comparisonJson = args.comparison_json as string
 
   if (!title?.trim()) {
-    return { success: false, error: "标题为空", message: "保存失败：请提供对比标题" }
+    return fail("INVALID_ARGS", "保存失败：请提供对比标题")
   }
   if (!comparisonJson?.trim()) {
-    return { success: false, error: "对比数据为空", message: "保存失败：没有可保存的对比数据" }
+    return fail("INVALID_ARGS", "保存失败：没有可保存的对比数据")
   }
 
   try {
@@ -228,7 +226,7 @@ async function handleSaveComparison(
       message: `已保存对比《${title}》`
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `保存对比失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `保存对比失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 

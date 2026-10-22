@@ -285,6 +285,9 @@ export function resetClient(): void {
 // Agentic retrieval can take several rounds for multi-hop questions
 const MAX_TOOL_CALL_ROUNDS = 8
 
+// 连续失败的工具执行达到该阈值时，触发熔断，停止继续执行（循环级终止）
+const MAX_CONSECUTIVE_FAILURES = 3
+
 /**
  * Build a concise reading history section for injection into the system prompt.
  * Limits output to ~800 bytes to protect token budget.
@@ -453,6 +456,7 @@ ${goalPrompt}
   ]
 
   let currentRound = 0
+  let consecutiveFailures = 0
 
   while (currentRound < MAX_TOOL_CALL_ROUNDS) {
     onStatus?.("思考中...", "thinking")
@@ -548,9 +552,21 @@ ${goalPrompt}
 
       onStatus?.(`执行工具: ${toolName}`, "tool_call")
 
-      const result: ToolResult = await executeToolCall(toolName, args, toolContext, (status) => {
-        onStatus?.(status, "tool_call")
-      })
+      let result: ToolResult
+      try {
+        result = await executeToolCall(toolName, args, toolContext, (status) => {
+          onStatus?.(status, "tool_call")
+        })
+      } catch (e) {
+        // 双保险：registry 已保证永不抛出，此处兜底防止懒加载等边界异常
+        result = { success: false, code: "INTERNAL_ERROR", error: String((e as any)?.message ?? e), message: "工具执行异常" }
+      }
+
+      if (result.success) {
+        consecutiveFailures = 0
+      } else {
+        consecutiveFailures++
+      }
 
       toolCallsExecuted.push({
         name: toolName,
@@ -558,7 +574,8 @@ ${goalPrompt}
         result: {
           success: result.success,
           message: result.message,
-          data: result.data
+          data: result.data,
+          code: result.code
         }
       })
 
@@ -570,6 +587,19 @@ ${goalPrompt}
     }
 
     currentRound++
+
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      onStatus?.("连续操作失败，停止执行", "complete")
+      return {
+        success: true,
+        message: `部分操作已完成，但连续 ${consecutiveFailures} 次操作失败，已停止继续执行。已完成 ${toolCallsExecuted.length} 个工具调用。`,
+        toolCallsExecuted,
+        fallbackToSimpleChat: false,
+        newSummary,
+        budgetReport,
+        terminatedBy: "consecutive_failures"
+      }
+    }
   }
 
   onStatus?.("达到最大调用轮数", "complete")
@@ -579,7 +609,8 @@ ${goalPrompt}
     toolCallsExecuted,
     fallbackToSimpleChat: false,
     newSummary,
-    budgetReport
+    budgetReport,
+    terminatedBy: "max_rounds"
   }
 }
 

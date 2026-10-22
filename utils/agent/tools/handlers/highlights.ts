@@ -3,9 +3,10 @@ import {
   saveHighlights,
   saveHighlightsWithCategories
 } from "~utils/storage/storage"
-import { applyHighlightsToPage, resolveToolSourceText } from "../../agent-tools"
+import { applyHighlightsToPage, resolveToolSourceText, fail } from "../../agent-tools"
 import { trackEvent } from "~utils/reading/reading-tracker"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
+import { classifyError } from "../../tool-error"
 import type { ToolHandler } from "../registry"
 import type { HighlightCategory } from "~utils/storage/storage"
 
@@ -74,10 +75,10 @@ async function handleApplyHighlight(
 ): Promise<ToolResult> {
   const { items, error } = normalizeHighlightArgs(args)
   if (error || items.length === 0) {
-    return { success: false, error: error || "没有指定要高亮的短语", message: `高亮失败：${error}` }
+    return fail("INVALID_ARGS", `高亮失败：${error}`)
   }
   if (!context.currentTabId) {
-    return { success: false, error: "无法获取当前标签页", message: "高亮失败：无法访问页面" }
+    return fail("INVALID_ARGS", "高亮失败：无法访问页面")
   }
   const effectiveText = resolveToolSourceText(context)
 
@@ -152,7 +153,7 @@ async function handleApplyHighlight(
       }
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `高亮失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `高亮失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
@@ -171,7 +172,7 @@ async function handleGetHighlights(
         : "当前页面暂无高亮"
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `获取高亮失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `获取高亮失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 

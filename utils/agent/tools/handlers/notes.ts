@@ -1,7 +1,8 @@
 import { saveNote, getNotesByUrl } from "~utils/storage/storage"
 import { trackEvent } from "~utils/reading/reading-tracker"
-import { resolveToolSourceText } from "../../agent-tools"
+import { resolveToolSourceText, fail } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
+import { classifyError } from "../../tool-error"
 import type { ToolHandler } from "../registry"
 
 async function handleSaveNote(
@@ -11,11 +12,11 @@ async function handleSaveNote(
 ): Promise<ToolResult> {
   const comment = args.comment as string
   if (!comment?.trim()) {
-    return { success: false, error: "笔记内容不能为空", message: "保存失败：笔记内容为空" }
+    return fail("INVALID_ARGS", "保存失败：笔记内容为空")
   }
   const effectiveText = resolveToolSourceText(context)
   if (!effectiveText) {
-    return { success: false, error: "没有可用文本", message: "保存失败：请先选中要记录的文本或加载论文全文" }
+    return fail("INVALID_ARGS", "保存失败：请先选中要记录的文本或加载论文全文")
   }
   const textSource = context.selectedText?.trim() ? "选中文本" : "论文全文"
   try {
@@ -27,7 +28,7 @@ async function handleSaveNote(
       message: `已保存笔记（关联${textSource}）：${comment.slice(0, 30)}${comment.length > 30 ? "..." : ""}`
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `保存笔记失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `保存笔记失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
@@ -46,7 +47,7 @@ async function handleGetNotes(
         : "当前页面暂无笔记"
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `获取笔记失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `获取笔记失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
@@ -57,7 +58,7 @@ async function handleSearchNotes(
 ): Promise<ToolResult> {
   const query = args.query as string
   if (!query?.trim()) {
-    return { success: false, error: "搜索关键词为空", message: "搜索失败：请提供搜索关键词" }
+    return fail("INVALID_ARGS", "搜索失败：请提供搜索关键词")
   }
   try {
     const pageNotes = await getNotesByUrl(context.currentUrl)
@@ -74,7 +75,7 @@ async function handleSearchNotes(
         : "当前页面未找到相关笔记"
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `搜索失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `搜索失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 

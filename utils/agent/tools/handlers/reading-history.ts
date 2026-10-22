@@ -1,5 +1,7 @@
 import { trackEvent } from "~utils/reading/reading-tracker"
+import { fail } from "../../agent-tools"
 import type { ToolExecutionContext, ToolResult, ToolExecutionCallback } from "../../agent-tools"
+import { classifyError } from "../../tool-error"
 import type { ToolHandler } from "../registry"
 
 async function handleGetReadingHistory(
@@ -67,7 +69,7 @@ async function handleGetReadingHistory(
         `- 最近阅读的论文：\n${recentList || "  暂无记录"}`
     }
   } catch (e: any) {
-    return { success: false, error: e?.message, message: `获取阅读历史失败：${e?.message ?? String(e)}` }
+    return fail(classifyError(e), `获取阅读历史失败：${e?.message ?? String(e)}`, String(e?.message ?? e))
   }
 }
 
